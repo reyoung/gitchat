@@ -40,7 +40,7 @@ func (s *Service) Init(ctx context.Context) error {
 
 func (s *Service) Sync(ctx context.Context) error {
 	if s.RemoteName != "" {
-		if err := s.Repo.Fetch(ctx, s.RemoteName); err != nil {
+		if err := s.Repo.Fetch(ctx, s.RemoteName); err != nil && !errors.Is(err, transport.ErrEmptyRemoteRepository) && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 			return err
 		}
 	}

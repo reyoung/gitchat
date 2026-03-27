@@ -291,6 +291,27 @@ func TestCreateUserAndChannelWorkAgainstRemoteRepo(t *testing.T) {
 	}
 }
 
+func TestSyncAllowsEmptyRemoteRepository(t *testing.T) {
+	ctx := context.Background()
+	repoSpec := testutil.NewEmptyRemoteRepo(t)
+	dbPath := filepath.Join(t.TempDir(), "cache.db")
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	svc := NewService(gitrepo.NewRemote(repoSpec), st)
+	svc.RemoteName = "origin"
+
+	if err := svc.Init(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Sync(ctx); err != nil {
+		t.Fatalf("expected empty remote sync to succeed, got %v", err)
+	}
+}
+
 type modelMessageView struct {
 	idx int
 }
