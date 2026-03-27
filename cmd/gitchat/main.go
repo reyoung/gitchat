@@ -10,8 +10,8 @@ import (
 
 	"github.com/reyoung/gitchat/app"
 	"github.com/reyoung/gitchat/gitrepo"
+	"github.com/reyoung/gitchat/gui"
 	"github.com/reyoung/gitchat/store"
-	"github.com/reyoung/gitchat/tui"
 )
 
 type stringListFlag []string
@@ -49,8 +49,8 @@ func run(ctx context.Context, args []string) error {
 		return cmdMessages(ctx, args[1:])
 	case "experiments":
 		return cmdExperiments(ctx, args[1:])
-	case "tui":
-		return cmdTUI(ctx, args[1:])
+	case "gui":
+		return cmdGUI(ctx, args[1:])
 	default:
 		usage()
 		return fmt.Errorf("unknown command %q", args[0])
@@ -72,7 +72,7 @@ Commands:
   experiments create
   experiments retain
   experiments list
-  tui`)
+  gui`)
 }
 
 func defaultRepoPath() string {
@@ -410,8 +410,8 @@ func cmdMessages(ctx context.Context, args []string) error {
 	}
 }
 
-func cmdTUI(ctx context.Context, args []string) error {
-	fs := flag.NewFlagSet("tui", flag.ContinueOnError)
+func cmdGUI(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("gui", flag.ContinueOnError)
 	repoPath := fs.String("repo", defaultRepoPath(), "repo URL, SSH repo spec, or local git repo path")
 	dbPath := fs.String("db", "", "path to cache db")
 	if err := fs.Parse(args); err != nil {
@@ -426,5 +426,5 @@ func cmdTUI(ctx context.Context, args []string) error {
 		return err
 	}
 	defer closeFn()
-	return tui.Run(ctx, svc, tui.Defaults{UserName: opts.UserName})
+	return gui.Run(ctx, svc, gui.Defaults{UserName: opts.UserName})
 }

@@ -4,7 +4,7 @@
 
 - 一个可复用的 Go 核心库
 - 一个 CLI
-- 一个可写的 TUI
+- 一个基于 Wails 的桌面 GUI
 - 一个基于 SQLite 的本地缓存层
 
 当前假设：
@@ -26,7 +26,7 @@
 - 列出已索引的 channels
 - 列出已索引的 experiments
 - 按 channel 列出消息
-- 启动可写的 TUI 界面
+- 启动类 Slack 的桌面 GUI
 
 ## 目录
 
@@ -50,7 +50,7 @@ go run ./cmd/gitchat messages send --channel research --subject hello --body wor
 go run ./cmd/gitchat channels list
 go run ./cmd/gitchat experiments list
 go run ./cmd/gitchat messages list --channel research
-go run ./cmd/gitchat tui
+go run ./cmd/gitchat gui
 ```
 
 默认缓存文件位置：
@@ -87,5 +87,5 @@ user:
 ## 后续方向
 
 - 增加更严格的协议有效性校验，而不只是结构化索引
-- 增加更完整的 TUI 交互体验和更多校验反馈
+- 增加更完整的 GUI 交互体验和更多校验反馈
 - 提供可复用给 GUI 的稳定应用层 API
