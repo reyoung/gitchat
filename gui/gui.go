@@ -7,6 +7,7 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	wailsmac "github.com/wailsapp/wails/v2/pkg/options/mac"
 
 	"github.com/reyoung/gitchat/app"
 )
@@ -29,6 +30,13 @@ func Run(_ context.Context, svc *app.Service, defaults Defaults) error {
 		DisableResize:    false,
 		Frameless:        false,
 		BackgroundColour: &options.RGBA{R: 22, G: 24, B: 31, A: 1},
+		Mac: &wailsmac.Options{
+			TitleBar: wailsmac.TitleBarDefault(),
+			Preferences: &wailsmac.Preferences{
+				FullscreenEnabled: wailsmac.Enabled,
+			},
+			DisableZoom: false,
+		},
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
