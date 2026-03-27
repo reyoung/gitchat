@@ -472,11 +472,47 @@ func (s *Service) UploadImageAttachment(ctx context.Context, userID, channelID, 
 	if err := s.ensureUserBranch(ctx, userID); err != nil {
 		return UploadedAttachment{}, err
 	}
+	destPath := filepath.ToSlash(filepath.Join("attachments", channelID, fmt.Sprintf("%d-%s", s.Now().UTC().UnixNano(), filepath.Base(sourcePath))))
+	uploaded, err := s.uploadLFSAssetToUserBranch(ctx, userID, destPath, sourcePath, "attachments/**", fmt.Sprintf("upload attachment %s", filepath.Base(destPath)))
+	if err != nil {
+		return UploadedAttachment{}, err
+	}
+	uploaded.Markdown = fmt.Sprintf("![%s](%s)", filepath.Base(destPath), buildGitAssetURI(uploaded.CommitHash, uploaded.Path))
+	if err := s.Sync(ctx); err != nil {
+		return UploadedAttachment{}, err
+	}
+	return uploaded, nil
+}
+
+func (s *Service) SetUserAvatarFromFile(ctx context.Context, userID, sourcePath string) (string, error) {
+	userID = strings.TrimSpace(userID)
+	sourcePath = strings.TrimSpace(sourcePath)
+	if userID == "" || sourcePath == "" {
+		return "", fmt.Errorf("user and source path are required")
+	}
+	if err := s.Sync(ctx); err != nil {
+		return "", err
+	}
+	if err := s.ensureUserBranch(ctx, userID); err != nil {
+		return "", err
+	}
+	destPath := filepath.ToSlash(filepath.Join("avatars", userID, fmt.Sprintf("%d-%s", s.Now().UTC().UnixNano(), filepath.Base(sourcePath))))
+	uploaded, err := s.uploadLFSAssetToUserBranch(ctx, userID, destPath, sourcePath, "avatars/**", fmt.Sprintf("upload avatar %s", filepath.Base(destPath)))
+	if err != nil {
+		return "", err
+	}
+	avatarURL := buildGitAssetURI(uploaded.CommitHash, uploaded.Path)
+	if err := s.UpdateUserProfile(ctx, userID, avatarURL); err != nil {
+		return "", err
+	}
+	return avatarURL, nil
+}
+
+func (s *Service) uploadLFSAssetToUserBranch(ctx context.Context, userID, destPath, sourcePath, trackPattern, commitMessage string) (UploadedAttachment, error) {
 	repoSpec := s.repoSpec()
 	if repoSpec == "" {
 		return UploadedAttachment{}, fmt.Errorf("repo spec is required")
 	}
-	destPath := filepath.ToSlash(filepath.Join("attachments", channelID, fmt.Sprintf("%d-%s", s.Now().UTC().UnixNano(), filepath.Base(sourcePath))))
 	tmpDir, err := os.MkdirTemp("", "gitchat-upload-*")
 	if err != nil {
 		return UploadedAttachment{}, err
@@ -495,7 +531,7 @@ func (s *Service) UploadImageAttachment(ctx context.Context, userID, channelID, 
 	if err := runGit(ctx, tmpDir, "lfs", "install", "--local"); err != nil {
 		return UploadedAttachment{}, err
 	}
-	if err := runGit(ctx, tmpDir, "lfs", "track", "attachments/**"); err != nil {
+	if err := runGit(ctx, tmpDir, "lfs", "track", trackPattern); err != nil {
 		return UploadedAttachment{}, err
 	}
 	if err := os.MkdirAll(filepath.Join(tmpDir, filepath.Dir(destPath)), 0o755); err != nil {
@@ -511,7 +547,7 @@ func (s *Service) UploadImageAttachment(ctx context.Context, userID, channelID, 
 	if err := runGit(ctx, tmpDir, "add", ".gitattributes", destPath); err != nil {
 		return UploadedAttachment{}, err
 	}
-	if err := runGit(ctx, tmpDir, "commit", "-m", fmt.Sprintf("upload attachment %s", filepath.Base(destPath))); err != nil {
+	if err := runGit(ctx, tmpDir, "commit", "-m", commitMessage); err != nil {
 		return UploadedAttachment{}, err
 	}
 	if err := runGit(ctx, tmpDir, "push", "origin", "HEAD:users/"+userID); err != nil {
@@ -521,14 +557,9 @@ func (s *Service) UploadImageAttachment(ctx context.Context, userID, channelID, 
 	if err != nil {
 		return UploadedAttachment{}, err
 	}
-	if err := s.Sync(ctx); err != nil {
-		return UploadedAttachment{}, err
-	}
-	markdown := fmt.Sprintf("![%s](gitchat-attachment://%s?path=%s)", filepath.Base(destPath), strings.TrimSpace(commitHash), url.QueryEscape(destPath))
 	return UploadedAttachment{
 		CommitHash: strings.TrimSpace(commitHash),
 		Path:       destPath,
-		Markdown:   markdown,
 	}, nil
 }
 
@@ -597,6 +628,10 @@ func runGitOutput(ctx context.Context, dir string, args ...string) (string, erro
 		return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+func buildGitAssetURI(commitHash, path string) string {
+	return fmt.Sprintf("gitchat-attachment://%s?path=%s", strings.TrimSpace(commitHash), url.QueryEscape(path))
 }
 
 func (s *Service) pushBranches(ctx context.Context, branches ...string) error {

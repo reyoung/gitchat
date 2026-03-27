@@ -15,6 +15,7 @@ type serviceAPI interface {
 	Sync(context.Context) error
 	CreateUser(context.Context, string, string) error
 	UpdateUserProfile(context.Context, string, string) error
+	SetUserAvatarFromFile(context.Context, string, string) (string, error)
 	CreateChannel(context.Context, string, string, string) error
 	AddChannelMember(context.Context, string, string, string) error
 	CreateExperiment(context.Context, string, string, string, string, string) error
@@ -100,6 +101,10 @@ type ResolveAttachmentRequest struct {
 	Path       string `json:"path"`
 }
 
+type UpdateAvatarRequest struct {
+	UserID string `json:"userID"`
+}
+
 type CreateChannelRequest struct {
 	ChannelID string `json:"channelID"`
 	Creator   string `json:"creator"`
@@ -181,6 +186,32 @@ func (b *Bridge) CreateUser(req CreateUserRequest) (AppState, error) {
 func (b *Bridge) UpdateUserProfile(req UpdateUserProfileRequest) (AppState, error) {
 	userID := firstNonEmpty(req.UserID, b.defaults.UserName)
 	if err := b.svc.UpdateUserProfile(context.Background(), userID, strings.TrimSpace(req.AvatarURL)); err != nil {
+		return AppState{}, err
+	}
+	return b.loadState("")
+}
+
+func (b *Bridge) UpdateAvatar(req UpdateAvatarRequest) (AppState, error) {
+	userID := firstNonEmpty(req.UserID, b.defaults.UserName)
+	if userID == "" {
+		return AppState{}, fmt.Errorf("user is required")
+	}
+	path, err := runtime.OpenFileDialog(b.ctx, runtime.OpenDialogOptions{
+		Title: "Choose avatar",
+		Filters: []runtime.FileFilter{
+			{
+				DisplayName: "Images",
+				Pattern:     "*.png;*.jpg;*.jpeg;*.gif;*.webp;*.svg",
+			},
+		},
+	})
+	if err != nil {
+		return AppState{}, err
+	}
+	if strings.TrimSpace(path) == "" {
+		return b.loadState("")
+	}
+	if _, err := b.svc.SetUserAvatarFromFile(context.Background(), userID, path); err != nil {
 		return AppState{}, err
 	}
 	return b.loadState("")

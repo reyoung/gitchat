@@ -13,9 +13,6 @@ const state = {
   },
   modal: null,
   status: null,
-  profile: {
-    avatarURL: "",
-  },
 };
 
 const el = (tag, className, text) => {
@@ -40,6 +37,16 @@ const initialsForUser = (userID) => {
 
 const renderAvatar = (avatarURL, fallback, className = "avatar") => {
   if (avatarURL) {
+    if (avatarURL.startsWith("gitchat-attachment://")) {
+      try {
+        const url = new URL(avatarURL);
+        const commitHash = escapeHTML(url.hostname);
+        const path = escapeHTML(url.searchParams.get("path") || "");
+        return `<img class="${className}" data-attachment-commit="${commitHash}" data-attachment-path="${path}" alt="${escapeHTML(fallback)}" />`;
+      } catch {
+        return `<div class="${className} fallback">${escapeHTML(initialsForUser(fallback))}</div>`;
+      }
+    }
     return `<img class="${className}" src="${escapeHTML(avatarURL)}" alt="${escapeHTML(fallback)}" />`;
   }
   return `<div class="${className} fallback">${escapeHTML(initialsForUser(fallback))}</div>`;
@@ -231,23 +238,6 @@ const modalPresets = {
       showStatus("success", `User ${values.userID} created`);
     },
   },
-  editProfile: {
-    title: "Edit profile",
-    description: "Set the avatar URL shown in the sidebar and on your messages.",
-    fields: [
-      { name: "avatarURL", label: "Avatar URL", placeholder: "https://example.com/avatar.png", value: () => state.profile.avatarURL || state.app?.currentUserAvatarURL || "" },
-    ],
-    action: async (values) => {
-      const appState = await call("UpdateUserProfile", {
-        userID: state.app?.currentUser || "",
-        avatarURL: values.avatarURL || "",
-      });
-      state.app = appState;
-      state.profile.avatarURL = (values.avatarURL || "").trim();
-      render();
-      showStatus("success", "Profile updated");
-    },
-  },
   createChannel: {
     title: "Create channel",
     description: "Open a new channel branch on top of main.",
@@ -350,6 +340,17 @@ const openThread = (commitHash) => {
 const closeThread = () => {
   state.selectedThread = "";
   render();
+};
+
+const updateAvatar = async () => {
+  try {
+    const appState = await call("UpdateAvatar", { userID: state.app?.currentUser || "" });
+    state.app = appState;
+    render();
+    showStatus("success", "Avatar updated");
+  } catch (err) {
+    showStatus("error", err.message || String(err));
+  }
 };
 
 const getVisibleMessages = (messages) => {
@@ -549,7 +550,7 @@ const render = () => {
   root.innerHTML = `
     <div class="shell">
       <aside class="workspace-rail">
-        <button class="workspace-badge" data-open-modal="editProfile">${renderAvatar(state.app.currentUserAvatarURL || state.profile.avatarURL, state.app.currentUser || "GC", "workspace-avatar")}</button>
+        <button class="workspace-badge" data-update-avatar="true">${renderAvatar(state.app.currentUserAvatarURL, state.app.currentUser || "GC", "workspace-avatar")}</button>
         <div class="workspace-user">
           <div>GitChat</div>
           <div>${escapeHTML(state.app.currentUser || "unconfigured user")}</div>
@@ -614,6 +615,10 @@ const render = () => {
 
   root.querySelectorAll("[data-open-modal]").forEach((button) => {
     button.addEventListener("click", () => openModal(button.dataset.openModal));
+  });
+
+  root.querySelectorAll("[data-update-avatar]").forEach((button) => {
+    button.addEventListener("click", updateAvatar);
   });
 
   root.querySelectorAll("[data-close-modal]").forEach((button) => {

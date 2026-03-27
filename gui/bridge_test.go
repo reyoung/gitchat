@@ -22,6 +22,9 @@ func (f *fakeService) CreateUser(context.Context, string, string) error {
 	return f.defaultError
 }
 func (f *fakeService) UpdateUserProfile(context.Context, string, string) error { return f.defaultError }
+func (f *fakeService) SetUserAvatarFromFile(context.Context, string, string) (string, error) {
+	return "gitchat-attachment://abc?path=avatars%2Falice%2Favatar.png", f.defaultError
+}
 func (f *fakeService) CreateChannel(context.Context, string, string, string) error {
 	return f.defaultError
 }
