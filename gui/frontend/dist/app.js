@@ -686,12 +686,9 @@ const render = () => {
           <div class="composer-card">
             ${replyBanner}
             <div class="composer-toolbar">
-              <button type="button" data-toggle-preview="true">${previewToggleLabel}</button>
-              <div class="hint">Markdown supported. Paste images. Cmd+Enter to send.</div>
             </div>
             <div class="${composerClass}">
               <div class="field composer-editor">
-                <label>Message</label>
                 <textarea id="body" placeholder="Write a message. Use Cmd+Enter to send. Markdown and images are supported.">${escapeHTML(state.draft.body)}</textarea>
               </div>
               <div class="composer-preview ${state.previewOpen ? "is-open" : ""}">
@@ -700,7 +697,10 @@ const render = () => {
               </div>
             </div>
             <div class="composer-actions">
-              <div class="hint">Replies, edits, and attachment uploads are appended as new commits.</div>
+              <div class="composer-meta">
+                <button type="button" data-toggle-preview="true">${previewToggleLabel}</button>
+                <div class="hint">Markdown supported. Paste images. Cmd+Enter to send. Replies, edits, and attachment uploads are appended as new commits.</div>
+              </div>
               <button class="primary" data-send="true">${sendLabel}</button>
             </div>
           </div>

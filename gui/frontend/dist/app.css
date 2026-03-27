@@ -448,11 +448,7 @@ button {
 }
 
 .composer-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px 0;
+  display: none;
 }
 
 .composer-toolbar button {
@@ -564,6 +560,24 @@ button {
   align-items: center;
   gap: 12px;
   padding: 14px;
+}
+
+.composer-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.composer-meta button {
+  border: 1px solid var(--line-strong);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
 }
 
 .reply-banner {
