@@ -21,7 +21,7 @@ import (
 type serviceAPI interface {
 	Sync(context.Context) error
 	CreateUser(context.Context, string, string) error
-	CreateChannel(context.Context, string, string, string) error
+	CreateChannel(context.Context, string, string, string, bool) error
 	AddChannelMember(context.Context, string, string, string) error
 	CreateExperiment(context.Context, string, string, string, string, string) error
 	RetainExperimentAttempt(context.Context, string, string) error
@@ -41,7 +41,9 @@ type channelItem struct {
 
 func (i channelItem) Title() string       { return i.channel.ID }
 func (i channelItem) Description() string { return i.channel.Creator }
-func (i channelItem) FilterValue() string { return i.channel.ID + " " + i.channel.Creator + " " + i.channel.Title }
+func (i channelItem) FilterValue() string {
+	return i.channel.ID + " " + i.channel.Creator + " " + i.channel.Title
+}
 
 type field struct {
 	label string
@@ -509,7 +511,7 @@ func (m state) submitFormCmd() tea.Cmd {
 		case "create-user":
 			err = m.svc.CreateUser(ctx, strings.TrimSpace(f.fields[0].value), "")
 		case "create-channel":
-			err = m.svc.CreateChannel(ctx, strings.TrimSpace(f.fields[0].value), m.defaults.UserName, strings.TrimSpace(f.fields[1].value))
+			err = m.svc.CreateChannel(ctx, strings.TrimSpace(f.fields[0].value), m.defaults.UserName, strings.TrimSpace(f.fields[1].value), false)
 		case "add-member":
 			err = m.svc.AddChannelMember(ctx, strings.TrimSpace(f.fields[0].value), m.defaults.UserName, strings.TrimSpace(f.fields[1].value))
 		case "create-experiment":

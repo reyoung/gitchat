@@ -6,6 +6,7 @@ const state = {
   selectedThread: "",
   attachmentCache: new Map(),
   previewOpen: false,
+  autoRefreshTimer: null,
   draft: {
     body: "",
     replyTo: "",
@@ -243,9 +244,11 @@ const waitForBridge = async () => {
 };
 
 const refreshState = async (selectedChannel = state.selectedChannel) => {
+  const previousState = state.app;
   const appState = await call("GetState", selectedChannel || "");
   state.app = appState;
   state.selectedChannel = appState.selectedChannel || "";
+  maybeNotifyNewMessages(previousState, appState);
   if (state.selectedThread) {
     const visible = getVisibleMessages(appState.messages || []);
     if (!visible.some((message) => message.commitHash === state.selectedThread)) {
@@ -253,6 +256,24 @@ const refreshState = async (selectedChannel = state.selectedChannel) => {
     }
   }
   render();
+};
+
+const maybeNotifyNewMessages = async (previousState, nextState) => {
+  if (!previousState || previousState.selectedChannel !== nextState.selectedChannel) return;
+  const previousHashes = new Set((previousState.messages || []).map((message) => message.commitHash));
+  const unseen = (nextState.messages || []).filter((message) => !previousHashes.has(message.commitHash) && message.userID !== nextState.currentUser);
+  if (!unseen.length) return;
+  const latest = unseen[unseen.length - 1];
+  try {
+    await call("NotifyNewMessages", {
+      channelID: nextState.selectedChannel,
+      userID: latest.userID,
+      body: latest.body,
+      count: unseen.length,
+    }, { timeoutMs: 0 });
+  } catch {
+    // Ignore notification failures so polling stays healthy.
+  }
 };
 
 const submitMessage = async () => {
@@ -301,6 +322,15 @@ const modalPresets = {
       { name: "channelID", label: "Channel ID", placeholder: "research" },
       { name: "title", label: "Title", placeholder: "Research" },
       { name: "creator", label: "Creator", placeholder: "alice", value: () => state.app?.currentUser || "" },
+      {
+        name: "visibility",
+        label: "Visibility",
+        value: () => "public",
+        options: [
+          { value: "public", label: "Public" },
+          { value: "private", label: "Private" },
+        ],
+      },
     ],
     action: async (values) => {
       const appState = await call("CreateChannel", values);
@@ -524,6 +554,17 @@ const renderModal = () => {
   const fields = preset.fields
     .map((field) => {
       const value = state.modal.values[field.name] || "";
+      if (field.options) {
+        const options = field.options
+          .map((option) => `<option value="${escapeHTML(option.value)}" ${option.value === value ? "selected" : ""}>${escapeHTML(option.label)}</option>`)
+          .join("");
+        return `
+          <div class="field">
+            <label>${escapeHTML(field.label)}</label>
+            <select data-modal-field="${escapeHTML(field.name)}">${options}</select>
+          </div>
+        `;
+      }
       if (field.multiline) {
         return `
           <div class="field">
@@ -636,7 +677,8 @@ const render = () => {
           </div>
           <div class="toolbar">
             <button class="primary" data-refresh="true">Refresh</button>
-            <button data-open-modal="addMember">Add member</button>
+            <button data-toggle-fullscreen="true">Full screen</button>
+            ${state.app.selectedChannelIsPublic ? "" : '<button data-open-modal="addMember">Add member</button>'}
           </div>
         </header>
         <section class="messages">${renderMessages()}</section>
@@ -689,10 +731,12 @@ const render = () => {
   });
 
   root.querySelectorAll("[data-modal-field]").forEach((field) => {
-    field.addEventListener("input", (event) => {
+    const syncField = (event) => {
       if (!state.modal) return;
       state.modal.values[event.target.dataset.modalField] = event.target.value;
-    });
+    };
+    field.addEventListener("input", syncField);
+    field.addEventListener("change", syncField);
   });
 
   root.querySelectorAll("[data-submit-modal]").forEach((button) => {
@@ -739,6 +783,16 @@ const render = () => {
     });
   });
 
+  root.querySelectorAll("[data-toggle-fullscreen]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        await call("ToggleFullscreen", null, { timeoutMs: 0 });
+      } catch (err) {
+        showStatus("error", err.message || String(err));
+      }
+    });
+  });
+
   root.querySelectorAll("[data-send]").forEach((button) => {
     button.addEventListener("click", submitMessage);
   });
@@ -779,6 +833,11 @@ const bootstrap = async () => {
   try {
     await waitForBridge();
     await refreshState("");
+    if (!state.autoRefreshTimer) {
+      state.autoRefreshTimer = window.setInterval(() => {
+        refreshState(state.selectedChannel).catch(() => {});
+      }, 10000);
+    }
   } catch (err) {
     showStatus("error", err.message || String(err));
     document.querySelector("#app").innerHTML = `<div class="empty-state">Failed to load GitChat desktop: ${escapeHTML(err.message || String(err))}</div>`;

@@ -24,7 +24,7 @@ func (f *fakeService) CreateUser(_ context.Context, userID, _ string) error {
 	f.lastUser = userID
 	return nil
 }
-func (f *fakeService) CreateChannel(context.Context, string, string, string) error { return nil }
+func (f *fakeService) CreateChannel(context.Context, string, string, string, bool) error { return nil }
 func (f *fakeService) AddChannelMember(context.Context, string, string, string) error {
 	return nil
 }

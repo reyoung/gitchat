@@ -138,11 +138,15 @@ func (s *Service) UpdateUserProfile(ctx context.Context, userID, avatarURL strin
 	})
 }
 
-func (s *Service) CreateChannel(ctx context.Context, channelID, creator, title string) error {
+func (s *Service) CreateChannel(ctx context.Context, channelID, creator, title string, isPublic bool) error {
 	channelID = strings.TrimSpace(channelID)
 	creator = strings.TrimSpace(creator)
 	if channelID == "" || creator == "" {
 		return fmt.Errorf("channel id and creator are required")
+	}
+	visibility := "private"
+	if isPublic {
+		visibility = "public"
 	}
 	return s.Repo.WithSavedBranch(ctx, func() error {
 		if err := s.ensureMainBranch(ctx); err != nil {
@@ -152,6 +156,7 @@ func (s *Service) CreateChannel(ctx context.Context, channelID, creator, title s
 			"id":         channelID,
 			"creator":    creator,
 			"title":      title,
+			"visibility": visibility,
 			"created_at": s.Now().UTC().Format(time.RFC3339),
 		}, "", "  ")
 		if err != nil {
@@ -176,12 +181,13 @@ func (s *Service) CreateChannel(ctx context.Context, channelID, creator, title s
 			"create channel "+channelID,
 			"",
 			map[string]string{
-				"Channel-Id":      channelID,
-				"Channel-Creator": creator,
-				"Channel-Title":   title,
-				"Event-Type":      "create",
-				"Actor":           creator,
-				"Member":          creator,
+				"Channel-Id":         channelID,
+				"Channel-Creator":    creator,
+				"Channel-Title":      title,
+				"Channel-Visibility": visibility,
+				"Event-Type":         "create",
+				"Actor":              creator,
+				"Member":             creator,
 			},
 		)
 		if err := s.Repo.Commit(ctx, msg, true); err != nil {

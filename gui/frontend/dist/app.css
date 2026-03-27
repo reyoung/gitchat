@@ -503,6 +503,7 @@ button {
 }
 
 .field input,
+.field select,
 .field textarea {
   width: 100%;
   border: 1px solid transparent;
@@ -519,6 +520,7 @@ button {
 }
 
 .field input:focus,
+.field select:focus,
 .field textarea:focus {
   border-color: rgba(34, 139, 230, 0.8);
 }

@@ -9,10 +9,11 @@ type User struct {
 }
 
 type Channel struct {
-	ID      string
-	Branch  string
-	Creator string
-	Title   string
+	ID       string
+	Branch   string
+	Creator  string
+	Title    string
+	IsPublic bool
 }
 
 type Experiment struct {

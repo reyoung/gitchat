@@ -25,7 +25,7 @@ func (f *fakeService) UpdateUserProfile(context.Context, string, string) error {
 func (f *fakeService) SetUserAvatarFromFile(context.Context, string, string) (string, error) {
 	return "gitchat-attachment://abc?path=avatars%2Falice%2Favatar.png", f.defaultError
 }
-func (f *fakeService) CreateChannel(context.Context, string, string, string) error {
+func (f *fakeService) CreateChannel(context.Context, string, string, string, bool) error {
 	return f.defaultError
 }
 func (f *fakeService) AddChannelMember(context.Context, string, string, string) error {
@@ -73,7 +73,7 @@ func (f *fakeService) ListMessagesByChannel(_ context.Context, channelID string)
 func TestGetStateSelectsFirstChannelByDefault(t *testing.T) {
 	svc := &fakeService{
 		channels: []model.Channel{
-			{ID: "research", Title: "Research", Creator: "alice"},
+			{ID: "research", Title: "Research", Creator: "alice", IsPublic: true},
 			{ID: "release", Title: "Release", Creator: "alice"},
 		},
 		messages: []model.Message{

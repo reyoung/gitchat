@@ -202,6 +202,7 @@ func cmdChannels(ctx context.Context, args []string) error {
 		channelID := fs.String("channel", "", "channel id")
 		creator := fs.String("creator", "", "creator user id")
 		title := fs.String("title", "", "channel title")
+		public := fs.Bool("public", false, "create a public channel")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -214,7 +215,7 @@ func cmdChannels(ctx context.Context, args []string) error {
 			return err
 		}
 		defer closeFn()
-		return svc.CreateChannel(ctx, *channelID, resolveUserName(*creator, opts), *title)
+		return svc.CreateChannel(ctx, *channelID, resolveUserName(*creator, opts), *title, *public)
 	case "add-member":
 		fs := flag.NewFlagSet("channels add-member", flag.ContinueOnError)
 		repoPath := fs.String("repo", defaultRepoPath(), "repo URL, SSH repo spec, or local git repo path")
@@ -256,7 +257,11 @@ func cmdChannels(ctx context.Context, args []string) error {
 			return err
 		}
 		for _, channel := range channels {
-			fmt.Printf("%s\t%s\t%s\t%s\n", channel.ID, channel.Creator, channel.Title, channel.Branch)
+			visibility := "private"
+			if channel.IsPublic {
+				visibility = "public"
+			}
+			fmt.Printf("%s\t%s\t%s\t%s\t%s\n", channel.ID, channel.Creator, channel.Title, visibility, channel.Branch)
 		}
 		return nil
 	default:

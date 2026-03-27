@@ -3,6 +3,7 @@ package gui
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -16,7 +17,7 @@ type serviceAPI interface {
 	CreateUser(context.Context, string, string) error
 	UpdateUserProfile(context.Context, string, string) error
 	SetUserAvatarFromFile(context.Context, string, string) (string, error)
-	CreateChannel(context.Context, string, string, string) error
+	CreateChannel(context.Context, string, string, string, bool) error
 	AddChannelMember(context.Context, string, string, string) error
 	CreateExperiment(context.Context, string, string, string, string, string) error
 	RetainExperimentAttempt(context.Context, string, string) error
@@ -37,19 +38,21 @@ type Bridge struct {
 }
 
 type AppState struct {
-	CurrentUser          string           `json:"currentUser"`
-	CurrentUserAvatarURL string           `json:"currentUserAvatarURL"`
-	SelectedChannel      string           `json:"selectedChannel"`
-	SelectedChannelTitle string           `json:"selectedChannelTitle"`
-	Channels             []ChannelView    `json:"channels"`
-	Experiments          []ExperimentView `json:"experiments"`
-	Messages             []MessageView    `json:"messages"`
+	CurrentUser             string           `json:"currentUser"`
+	CurrentUserAvatarURL    string           `json:"currentUserAvatarURL"`
+	SelectedChannel         string           `json:"selectedChannel"`
+	SelectedChannelTitle    string           `json:"selectedChannelTitle"`
+	SelectedChannelIsPublic bool             `json:"selectedChannelIsPublic"`
+	Channels                []ChannelView    `json:"channels"`
+	Experiments             []ExperimentView `json:"experiments"`
+	Messages                []MessageView    `json:"messages"`
 }
 
 type ChannelView struct {
-	ID      string `json:"id"`
-	Title   string `json:"title"`
-	Creator string `json:"creator"`
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Creator  string `json:"creator"`
+	IsPublic bool   `json:"isPublic"`
 }
 
 type ExperimentView struct {
@@ -113,10 +116,18 @@ type UpdateAvatarRequest struct {
 	UserID string `json:"userID"`
 }
 
-type CreateChannelRequest struct {
+type NotificationRequest struct {
 	ChannelID string `json:"channelID"`
-	Creator   string `json:"creator"`
-	Title     string `json:"title"`
+	UserID    string `json:"userID"`
+	Body      string `json:"body"`
+	Count     int    `json:"count"`
+}
+
+type CreateChannelRequest struct {
+	ChannelID  string `json:"channelID"`
+	Creator    string `json:"creator"`
+	Title      string `json:"title"`
+	Visibility string `json:"visibility"`
 }
 
 type AddMemberRequest struct {
@@ -227,7 +238,8 @@ func (b *Bridge) UpdateAvatar(req UpdateAvatarRequest) (AppState, error) {
 
 func (b *Bridge) CreateChannel(req CreateChannelRequest) (AppState, error) {
 	creator := firstNonEmpty(req.Creator, b.defaults.UserName)
-	if err := b.svc.CreateChannel(context.Background(), strings.TrimSpace(req.ChannelID), creator, strings.TrimSpace(req.Title)); err != nil {
+	isPublic := !strings.EqualFold(strings.TrimSpace(req.Visibility), "private")
+	if err := b.svc.CreateChannel(context.Background(), strings.TrimSpace(req.ChannelID), creator, strings.TrimSpace(req.Title), isPublic); err != nil {
 		return AppState{}, err
 	}
 	return b.loadState(strings.TrimSpace(req.ChannelID))
@@ -320,6 +332,36 @@ func (b *Bridge) RetainExperiment(req RetainAttemptRequest) (AppState, error) {
 	return b.loadState("")
 }
 
+func (b *Bridge) ToggleFullscreen() bool {
+	if runtime.WindowIsFullscreen(b.ctx) {
+		runtime.WindowUnfullscreen(b.ctx)
+		return false
+	}
+	runtime.WindowFullscreen(b.ctx)
+	return true
+}
+
+func (b *Bridge) NotifyNewMessages(req NotificationRequest) error {
+	title := "GitChat"
+	subtitle := "#" + strings.TrimSpace(req.ChannelID)
+	if user := strings.TrimSpace(req.UserID); user != "" {
+		subtitle += " · " + user
+	}
+	body := strings.TrimSpace(req.Body)
+	if req.Count > 1 {
+		body = fmt.Sprintf("%d new messages", req.Count)
+	}
+	if body == "" {
+		body = "New message"
+	}
+	cmd := exec.Command("osascript")
+	cmd.Args = append(cmd.Args,
+		"-e", fmt.Sprintf(`display notification %q with title %q subtitle %q`, body, title, subtitle),
+		"-e", "beep",
+	)
+	return cmd.Run()
+}
+
 func (b *Bridge) loadState(selectedChannel string) (AppState, error) {
 	channels, err := b.svc.ListChannels(context.Background())
 	if err != nil {
@@ -353,12 +395,14 @@ func (b *Bridge) loadState(selectedChannel string) (AppState, error) {
 			title = channel.ID
 		}
 		state.Channels = append(state.Channels, ChannelView{
-			ID:      channel.ID,
-			Title:   title,
-			Creator: channel.Creator,
+			ID:       channel.ID,
+			Title:    title,
+			Creator:  channel.Creator,
+			IsPublic: channel.IsPublic,
 		})
 		if channel.ID == selectedChannel {
 			state.SelectedChannelTitle = title
+			state.SelectedChannelIsPublic = channel.IsPublic
 		}
 	}
 	for _, experiment := range experiments {

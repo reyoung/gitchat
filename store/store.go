@@ -51,7 +51,8 @@ func (s *Store) Migrate(ctx context.Context) error {
 			id TEXT PRIMARY KEY,
 			branch TEXT NOT NULL,
 			creator TEXT NOT NULL DEFAULT '',
-			title TEXT NOT NULL DEFAULT ''
+			title TEXT NOT NULL DEFAULT '',
+			is_public INTEGER NOT NULL DEFAULT 0
 		)`,
 		`CREATE TABLE IF NOT EXISTS experiments (
 			id TEXT PRIMARY KEY,
@@ -103,6 +104,9 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN avatar_url TEXT NOT NULL DEFAULT ''`); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
 		return fmt.Errorf("add users.avatar_url: %w", err)
 	}
+	if _, err := s.db.ExecContext(ctx, `ALTER TABLE channels ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0`); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("add channels.is_public: %w", err)
+	}
 	return nil
 }
 
@@ -125,9 +129,9 @@ func (s *Store) ReplaceUserBranch(ctx context.Context, user model.User) error {
 }
 
 func (s *Store) ReplaceChannelBranch(ctx context.Context, channel model.Channel) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO channels(id, branch, creator, title) VALUES(?, ?, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET branch = excluded.branch, creator = excluded.creator, title = excluded.title`,
-		channel.ID, channel.Branch, channel.Creator, channel.Title)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO channels(id, branch, creator, title, is_public) VALUES(?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET branch = excluded.branch, creator = excluded.creator, title = excluded.title, is_public = excluded.is_public`,
+		channel.ID, channel.Branch, channel.Creator, channel.Title, boolToInt(channel.IsPublic))
 	return err
 }
 
@@ -234,7 +238,7 @@ func (s *Store) UpdateRefHead(ctx context.Context, ref model.RefState) error {
 }
 
 func (s *Store) ListChannels(ctx context.Context) ([]model.Channel, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, branch, creator, title FROM channels ORDER BY id`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, branch, creator, title, is_public FROM channels ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -242,12 +246,21 @@ func (s *Store) ListChannels(ctx context.Context) ([]model.Channel, error) {
 	var channels []model.Channel
 	for rows.Next() {
 		var channel model.Channel
-		if err := rows.Scan(&channel.ID, &channel.Branch, &channel.Creator, &channel.Title); err != nil {
+		var isPublic int
+		if err := rows.Scan(&channel.ID, &channel.Branch, &channel.Creator, &channel.Title, &isPublic); err != nil {
 			return nil, err
 		}
+		channel.IsPublic = isPublic != 0
 		channels = append(channels, channel)
 	}
 	return channels, rows.Err()
+}
+
+func boolToInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
 }
 
 func (s *Store) ListUsers(ctx context.Context) ([]model.User, error) {

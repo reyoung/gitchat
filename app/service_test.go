@@ -35,7 +35,7 @@ func TestServiceWorkflow(t *testing.T) {
 	if err := svc.CreateUser(ctx, "bob", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.CreateChannel(ctx, "research", "alice", "Research"); err != nil {
+	if err := svc.CreateChannel(ctx, "research", "alice", "Research", true); err != nil {
 		t.Fatal(err)
 	}
 	if err := svc.AddChannelMember(ctx, "research", "alice", "bob"); err != nil {
@@ -175,7 +175,7 @@ func TestSendMessageAutoCreatesMissingUser(t *testing.T) {
 	if err := svc.CreateUser(ctx, "alice", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.CreateChannel(ctx, "research", "alice", "Research"); err != nil {
+	if err := svc.CreateChannel(ctx, "research", "alice", "Research", true); err != nil {
 		t.Fatal(err)
 	}
 	if err := svc.AddChannelMember(ctx, "research", "alice", "carol"); err != nil {
@@ -248,7 +248,7 @@ func TestEditMessageAppendsCommitWithoutChangingChannelHeads(t *testing.T) {
 	if err := svc.CreateUser(ctx, "alice", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.CreateChannel(ctx, "research", "alice", "Research"); err != nil {
+	if err := svc.CreateChannel(ctx, "research", "alice", "Research", true); err != nil {
 		t.Fatal(err)
 	}
 	if err := svc.SendMessage(ctx, SendMessageInput{
@@ -319,7 +319,7 @@ func TestCreateUserAndChannelWorkAgainstRemoteRepo(t *testing.T) {
 	if err := svc.CreateUser(ctx, "alice", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.CreateChannel(ctx, "research", "alice", "Research"); err != nil {
+	if err := svc.CreateChannel(ctx, "research", "alice", "Research", true); err != nil {
 		t.Fatal(err)
 	}
 

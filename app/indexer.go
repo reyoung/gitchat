@@ -110,6 +110,7 @@ func (i *Indexer) indexChannelBranch(ctx context.Context, sourceRef, branch stri
 		if idx == 0 {
 			channel.Creator = firstNonEmpty(commit.Trailers["Channel-Creator"], actor)
 			channel.Title = commit.Trailers["Channel-Title"]
+			channel.IsPublic = strings.EqualFold(firstNonEmpty(commit.Trailers["Channel-Visibility"], "private"), "public")
 		}
 		if eventType == "" {
 			continue
