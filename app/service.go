@@ -722,12 +722,12 @@ func (s *Service) ensureMainBranch(ctx context.Context) error {
 }
 
 func (s *Service) ensureWritableBranch(ctx context.Context, branch string) error {
-	if s.Repo.BranchExists(ctx, branch) {
-		return nil
-	}
 	remoteRef := "refs/remotes/origin/" + branch
 	if s.Repo.RefExists(ctx, remoteRef) {
-		return s.Repo.EnsureBranch(ctx, branch, remoteRef)
+		return s.Repo.SwitchTrackBranch(ctx, branch, remoteRef)
+	}
+	if s.Repo.BranchExists(ctx, branch) {
+		return nil
 	}
 	return fmt.Errorf("branch %s does not exist", branch)
 }
@@ -738,11 +738,11 @@ func (s *Service) ensureUserBranch(ctx context.Context, userID string) error {
 		return fmt.Errorf("user id is required")
 	}
 	branch := "users/" + userID
+	if s.Repo.RefExists(ctx, "refs/remotes/origin/"+branch) {
+		return s.ensureWritableBranch(ctx, branch)
+	}
 	if s.Repo.BranchExists(ctx, branch) {
 		return nil
-	}
-	if s.Repo.RefExists(ctx, "refs/remotes/origin/"+branch) {
-		return s.Repo.EnsureBranch(ctx, branch, "refs/remotes/origin/"+branch)
 	}
 	if err := s.CreateUser(ctx, userID, ""); err != nil {
 		return err

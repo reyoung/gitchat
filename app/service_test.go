@@ -381,6 +381,51 @@ func TestSyncAllowsEmptyRemoteRepository(t *testing.T) {
 	}
 }
 
+func TestSendMessageAfterAttachmentUploadRefreshesUserBranchHead(t *testing.T) {
+	ctx := context.Background()
+	repoSpec := testutil.NewRemoteRepo(t)
+	dbPath := filepath.Join(t.TempDir(), "cache.db")
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	svc := NewService(gitrepo.NewRemote(repoSpec), st)
+	svc.RemoteName = "origin"
+	svc.Now = func() time.Time { return time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC) }
+
+	if err := svc.Init(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.CreateUser(ctx, "alice", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.CreateChannel(ctx, "research", "alice", "Research", true); err != nil {
+		t.Fatal(err)
+	}
+
+	const tinyPNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9sX8Xl8AAAAASUVORK5CYII="
+	if _, err := svc.UploadImageDataURL(ctx, "alice", "research", "paste.png", tinyPNG); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SendMessage(ctx, SendMessageInput{
+		UserID:    "alice",
+		ChannelID: "research",
+		Body:      "after attachment",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	messages, err := st.ListMessagesByChannel(ctx, "research")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("expected 1 message after upload + send, got %d", len(messages))
+	}
+}
+
 type modelMessageView struct {
 	idx int
 }
