@@ -22,6 +22,7 @@ type serviceAPI interface {
 	RetainExperimentAttempt(context.Context, string, string) error
 	SendMessage(context.Context, app.SendMessageInput) error
 	UploadImageAttachment(context.Context, string, string, string) (app.UploadedAttachment, error)
+	UploadImageDataURL(context.Context, string, string, string, string) (app.UploadedAttachment, error)
 	LoadAttachmentDataURL(context.Context, string, string) (string, error)
 	ListChannels(context.Context) ([]model.Channel, error)
 	ListUsers(context.Context) ([]model.User, error)
@@ -99,6 +100,13 @@ type InsertImageRequest struct {
 type ResolveAttachmentRequest struct {
 	CommitHash string `json:"commitHash"`
 	Path       string `json:"path"`
+}
+
+type UploadPastedImageRequest struct {
+	UserID    string `json:"userID"`
+	ChannelID string `json:"channelID"`
+	Filename  string `json:"filename"`
+	DataURL   string `json:"dataURL"`
 }
 
 type UpdateAvatarRequest struct {
@@ -281,6 +289,28 @@ func (b *Bridge) InsertImage(req InsertImageRequest) (string, error) {
 
 func (b *Bridge) ResolveAttachment(req ResolveAttachmentRequest) (string, error) {
 	return b.svc.LoadAttachmentDataURL(context.Background(), strings.TrimSpace(req.CommitHash), strings.TrimSpace(req.Path))
+}
+
+func (b *Bridge) UploadPastedImage(req UploadPastedImageRequest) (string, error) {
+	userID := firstNonEmpty(req.UserID, b.defaults.UserName)
+	channelID := strings.TrimSpace(req.ChannelID)
+	if userID == "" {
+		return "", fmt.Errorf("user is required")
+	}
+	if channelID == "" {
+		return "", fmt.Errorf("channel is required")
+	}
+	attachment, err := b.svc.UploadImageDataURL(
+		context.Background(),
+		userID,
+		channelID,
+		strings.TrimSpace(req.Filename),
+		strings.TrimSpace(req.DataURL),
+	)
+	if err != nil {
+		return "", err
+	}
+	return attachment.Markdown, nil
 }
 
 func (b *Bridge) RetainExperiment(req RetainAttemptRequest) (AppState, error) {

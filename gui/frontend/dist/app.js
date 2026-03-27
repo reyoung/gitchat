@@ -174,6 +174,30 @@ const hydrateRenderedMarkdown = (root) => {
   });
 };
 
+const appendMarkdownToDraft = (markdown) => {
+  if (!markdown) return;
+  const needsLeadingBreak = state.draft.body && !state.draft.body.endsWith("\n");
+  state.draft.body += `${needsLeadingBreak ? "\n" : ""}${markdown}\n`;
+  render();
+};
+
+const uploadPastedImageFile = async (file) => {
+  const reader = new FileReader();
+  const dataURL = await new Promise((resolve, reject) => {
+    reader.onerror = () => reject(new Error("Failed to read pasted image"));
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.readAsDataURL(file);
+  });
+  const markdown = await call("UploadPastedImage", {
+    userID: state.app?.currentUser || "",
+    channelID: state.selectedChannel,
+    filename: file.name || "pasted-image.png",
+    dataURL,
+  });
+  appendMarkdownToDraft(markdown);
+  showStatus("success", "Image pasted");
+};
+
 const waitForBridge = async () => {
   const startedAt = Date.now();
   while (Date.now() - startedAt < 5000) {
@@ -594,6 +618,10 @@ const render = () => {
               <label>Message</label>
               <textarea id="body" placeholder="Write a message. Use Cmd+Enter to send. Markdown and images are supported.">${escapeHTML(state.draft.body)}</textarea>
             </div>
+            <div class="composer-preview">
+              <div class="field-label">Preview</div>
+              <div class="composer-preview-body markdown-body">${state.draft.body.trim() ? renderMarkdown(state.draft.body) : '<div class="composer-preview-empty">Markdown preview appears here.</div>'}</div>
+            </div>
             <div class="composer-actions">
               <div class="hint">Replies, edits, and attachment uploads are appended as new commits.</div>
               <button class="primary" data-send="true">${sendLabel}</button>
@@ -644,6 +672,23 @@ const render = () => {
       await submitMessage();
     }
   });
+  if (bodyInput) bodyInput.addEventListener("paste", async (event) => {
+    const items = Array.from(event.clipboardData?.items || []);
+    const imageItem = items.find((item) => item.type.startsWith("image/"));
+    if (!imageItem) return;
+    if (!state.selectedChannel) {
+      showStatus("error", "Select a channel before pasting an image");
+      return;
+    }
+    const file = imageItem.getAsFile();
+    if (!file) return;
+    event.preventDefault();
+    try {
+      await uploadPastedImageFile(file);
+    } catch (err) {
+      showStatus("error", err.message || String(err));
+    }
+  });
 
   root.querySelectorAll("[data-refresh]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -668,13 +713,9 @@ const render = () => {
           channelID: state.selectedChannel,
         });
         if (!markdown) return;
+        appendMarkdownToDraft(markdown);
         const composer = root.querySelector("#body");
-        const insertion = `${state.draft.body && !state.draft.body.endsWith("\n") ? "\n" : ""}${markdown}\n`;
-        state.draft.body += insertion;
-        if (composer) {
-          composer.value = state.draft.body;
-          composer.focus();
-        }
+        if (composer) composer.focus();
       } catch (err) {
         showStatus("error", err.message || String(err));
       }

@@ -504,6 +504,30 @@ button {
   border-color: rgba(34, 139, 230, 0.8);
 }
 
+.field-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.composer-preview {
+  padding: 14px;
+}
+
+.composer-preview-body {
+  min-height: 72px;
+  margin-top: 8px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.composer-preview-empty {
+  color: var(--muted);
+}
+
 .composer-actions {
   display: flex;
   justify-content: space-between;

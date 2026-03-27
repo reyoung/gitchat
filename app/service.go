@@ -484,6 +484,51 @@ func (s *Service) UploadImageAttachment(ctx context.Context, userID, channelID, 
 	return uploaded, nil
 }
 
+func (s *Service) UploadImageDataURL(ctx context.Context, userID, channelID, filename, dataURL string) (UploadedAttachment, error) {
+	userID = strings.TrimSpace(userID)
+	channelID = strings.TrimSpace(channelID)
+	filename = strings.TrimSpace(filename)
+	dataURL = strings.TrimSpace(dataURL)
+	if userID == "" || channelID == "" || dataURL == "" {
+		return UploadedAttachment{}, fmt.Errorf("user, channel, and image data are required")
+	}
+	header, encoded, ok := strings.Cut(dataURL, ",")
+	if !ok || !strings.HasPrefix(header, "data:") {
+		return UploadedAttachment{}, fmt.Errorf("invalid data url")
+	}
+	if !strings.Contains(header, ";base64") {
+		return UploadedAttachment{}, fmt.Errorf("image data url must be base64 encoded")
+	}
+	payload, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return UploadedAttachment{}, fmt.Errorf("decode image data: %w", err)
+	}
+	if filename == "" {
+		filename = "pasted-image"
+	}
+	if filepath.Ext(filename) == "" {
+		mimeType := strings.TrimPrefix(strings.Split(strings.TrimPrefix(header, "data:"), ";")[0], " ")
+		if exts, extErr := mime.ExtensionsByType(mimeType); extErr == nil && len(exts) > 0 {
+			filename += exts[0]
+		} else {
+			filename += ".png"
+		}
+	}
+	tmpFile, err := os.CreateTemp("", "gitchat-paste-*"+filepath.Ext(filename))
+	if err != nil {
+		return UploadedAttachment{}, err
+	}
+	defer os.Remove(tmpFile.Name())
+	if _, err := tmpFile.Write(payload); err != nil {
+		tmpFile.Close()
+		return UploadedAttachment{}, err
+	}
+	if err := tmpFile.Close(); err != nil {
+		return UploadedAttachment{}, err
+	}
+	return s.UploadImageAttachment(ctx, userID, channelID, tmpFile.Name())
+}
+
 func (s *Service) SetUserAvatarFromFile(ctx context.Context, userID, sourcePath string) (string, error) {
 	userID = strings.TrimSpace(userID)
 	sourcePath = strings.TrimSpace(sourcePath)
