@@ -798,7 +798,7 @@ const render = () => {
   root.querySelectorAll("[data-toggle-fullscreen]").forEach((button) => {
     button.addEventListener("click", async () => {
       try {
-        await call("ToggleFullscreen", null, { timeoutMs: 0 });
+        await call("ToggleFullscreen", undefined, { timeoutMs: 0 });
       } catch (err) {
         showStatus("error", err.message || String(err));
       }
