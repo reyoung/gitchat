@@ -905,7 +905,7 @@ const render = () => {
               </div>
               <div class="composer-preview ${state.previewOpen ? "is-open" : ""}">
                 <div class="field-label">Preview</div>
-                <div class="composer-preview-body markdown-body">${state.draft.body.trim() ? renderMarkdown(state.draft.body) : '<div class="composer-preview-empty">Markdown preview appears here.</div>'}</div>
+                <div class="composer-preview-body markdown-body" style="height:${Math.max(160, state.composerHeight)}px">${state.draft.body.trim() ? renderMarkdown(state.draft.body) : '<div class="composer-preview-empty">Markdown preview appears here.</div>'}</div>
               </div>
             </div>
             <div class="composer-actions">
