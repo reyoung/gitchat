@@ -606,11 +606,27 @@ const getThreadMessages = (messages, rootHash) => {
   return messages.filter((message) => getThreadRoot(byHash, message) === rootHash);
 };
 
+const dateLabelForMessage = (message) => {
+  const raw = String(message?.createdAt || "").trim();
+  if (!raw) return "";
+  const [datePart] = raw.split(" ");
+  return datePart || raw;
+};
+
+const renderDateDivider = (label) => `
+  <div class="message-divider">
+    <div class="message-divider-line"></div>
+    <div class="message-divider-label">${escapeHTML(label)}</div>
+    <div class="message-divider-line"></div>
+  </div>
+`;
+
 const renderMessageCard = (message, options = {}) => {
   const mine = message.userID === state.app.currentUser ? " mine" : "";
   const reply = message.replyTo ? `<span class="message-thread">reply to ${escapeHTML(message.replyTo.slice(0, 10))}</span>` : "";
   const edited = message.editCount ? `<span class="message-thread">edited ${message.editCount}x${message.editedAt ? ` · last ${escapeHTML(message.editedAt)}` : ""}</span>` : "";
   const deleted = message.deleted ? `<span class="message-thread">deleted${message.deletedAt ? ` · ${escapeHTML(message.deletedAt)}` : ""}</span>` : "";
+  const threadSummary = options.threadSummary || null;
   const tags = [];
   if (message.experimentID) {
     const sha = message.experimentSHA ? ` · ${escapeHTML(message.experimentSHA)}` : "";
@@ -626,7 +642,7 @@ const renderMessageCard = (message, options = {}) => {
   }
   if (message.deleted) {
     return `
-      <article class="message-card${mine} deleted-line">
+      <article class="message-row${mine} deleted-line">
         <div class="deleted-line-rule"></div>
         <div class="deleted-line-main">
           <span class="deleted-line-label">Deleted</span>
@@ -636,10 +652,12 @@ const renderMessageCard = (message, options = {}) => {
     `;
   }
   return `
-    <article class="message-card${mine}${message.deleted ? " deleted-collapsed" : ""}">
-      <div class="message-rail">
+    <article class="message-row${mine}">
+      <div class="message-avatar-wrap">
         ${renderAvatar(message.avatarURL, message.userID)}
-        <div class="message-meta">
+      </div>
+      <div class="message-content">
+        <div class="message-head">
           <span class="message-author">${escapeHTML(message.userID)}</span>
           <span class="message-time">${escapeHTML(message.createdAt)}</span>
           <span class="message-sha">${escapeHTML(message.shortHash)}</span>
@@ -647,11 +665,10 @@ const renderMessageCard = (message, options = {}) => {
           ${edited}
           ${deleted}
         </div>
-      </div>
-      <div class="message-main">
         <div class="message-actions">${actions.join("")}</div>
-        <div class="message-body markdown-body ${message.deleted ? "is-deleted compact" : ""}">${message.deleted ? '<p><em>Deleted</em></p>' : renderMarkdown(message.body || "")}</div>
+        <div class="message-body markdown-body">${renderMarkdown(message.body || "")}</div>
         ${tags.length ? `<div class="message-tags">${tags.join("")}</div>` : ""}
+        ${threadSummary ? `<button type="button" class="thread-summary" data-open-thread="${escapeHTML(message.commitHash)}">${escapeHTML(threadSummary)}</button>` : ""}
       </div>
     </article>
   `;
@@ -678,13 +695,29 @@ const renderMessages = () => {
           <button type="button" class="thread-back" data-close-thread="true">Back to channel</button>
           <div class="thread-meta">${threadMessages.length} message${threadMessages.length === 1 ? "" : "s"} in thread</div>
         </div>
-        ${threadMessages.map((message) => renderMessageCard(message, { hideThreadButton: true })).join("")}
+        ${threadMessages
+          .map((message, index) => {
+            const divider = index === 0 || dateLabelForMessage(threadMessages[index - 1]) !== dateLabelForMessage(message)
+              ? renderDateDivider(dateLabelForMessage(message))
+              : "";
+            return divider + renderMessageCard(message, { hideThreadButton: true });
+          })
+          .join("")}
       </div>
     `;
   }
   const roots = getThreadRoots(visibleMessages);
   return roots
-    .map((message) => renderMessageCard(message))
+    .map((message, index) => {
+      const threadMessages = getThreadMessages(visibleMessages, message.commitHash);
+      const replies = Math.max(0, threadMessages.length - 1);
+      const lastReply = replies > 0 ? threadMessages[threadMessages.length - 1].createdAt : "";
+      const divider = index === 0 || dateLabelForMessage(roots[index - 1]) !== dateLabelForMessage(message)
+        ? renderDateDivider(dateLabelForMessage(message))
+        : "";
+      const threadSummary = replies > 0 ? `${replies} repl${replies === 1 ? "y" : "ies"} · last ${lastReply}` : "";
+      return divider + renderMessageCard(message, { threadSummary });
+    })
     .join("");
 };
 

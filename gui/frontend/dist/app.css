@@ -294,44 +294,73 @@ button {
   font-weight: 600;
 }
 
-.message-card {
-  max-width: 920px;
-  padding: 16px;
-  border-radius: 16px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.05);
-  box-shadow: var(--shadow);
-  display: grid;
-  grid-template-columns: 128px minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
-}
-
-.message-card.mine {
-  border-color: rgba(46, 182, 125, 0.22);
-  background: linear-gradient(180deg, rgba(46, 182, 125, 0.12), rgba(255, 255, 255, 0.05));
-}
-
-.message-rail {
+.message-divider {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0 2px;
 }
 
-.avatar {
-  width: 46px;
-  height: 46px;
-  min-width: 46px;
+.message-divider-line {
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.message-divider-label {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.message-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 8px;
   border-radius: 12px;
 }
 
-.message-meta {
+.message-row:hover {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.message-row.mine {
+  background: linear-gradient(180deg, rgba(46, 182, 125, 0.06), rgba(255, 255, 255, 0.01));
+}
+
+.message-avatar-wrap {
+  padding-top: 2px;
   display: flex;
-  flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
-  min-height: 0;
+  justify-content: center;
+}
+
+.avatar {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  border-radius: 10px;
+}
+
+.message-content {
+  min-width: 0;
+  position: relative;
+}
+
+.message-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-height: 24px;
+  padding-right: 104px;
 }
 
 .message-author {
@@ -347,14 +376,8 @@ button {
   line-height: 1.35;
 }
 
-.message-main {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
 .message-body {
+  margin-top: 4px;
   line-height: 1.55;
   color: rgba(255, 255, 255, 0.92);
   min-width: 0;
@@ -418,24 +441,35 @@ button {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 .message-actions {
+  position: absolute;
+  top: 0;
+  right: 0;
   display: flex;
-  justify-content: flex-end;
   gap: 8px;
   min-height: 28px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.message-row:hover .message-actions,
+.message-row:focus-within .message-actions,
+.deleted-line .message-actions {
+  opacity: 1;
 }
 
 .message-action {
   border: 1px solid var(--line-strong);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(35, 39, 46, 0.9);
   color: var(--muted);
   border-radius: 999px;
   padding: 6px 10px;
   font-size: 12px;
   font-weight: 600;
+  box-shadow: 0 8px 24px rgba(10, 12, 16, 0.24);
 }
 
 .message-action.icon {
@@ -475,55 +509,8 @@ button {
 .message-body.compact p {
   margin: 0;
 }
-
-.message-card.deleted-collapsed {
-  grid-template-columns: 72px minmax(0, 1fr);
-  gap: 12px;
-  padding: 10px 14px;
-  align-items: center;
-}
-
-.message-card.deleted-collapsed .avatar {
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  border-radius: 10px;
-}
-
-.message-card.deleted-collapsed .message-meta {
-  gap: 2px;
-}
-
-.message-card.deleted-collapsed .message-author,
-.message-card.deleted-collapsed .message-time,
-.message-card.deleted-collapsed .message-sha {
-  display: none;
-}
-
-.message-card.deleted-collapsed .message-main {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-}
-
-.message-card.deleted-collapsed .message-actions {
-  margin: 0;
-  min-height: 0;
-}
-
-.message-card.deleted-collapsed .message-body {
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.message-card.deleted-collapsed .message-tags {
-  display: none;
-}
-
-.message-card.deleted-line {
+.message-row.deleted-line {
   display: block;
-  max-width: 920px;
   padding: 6px 2px;
   border: 0;
   background: transparent;
@@ -540,7 +527,7 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding-top: 8px;
+  padding-top: 6px;
 }
 
 .deleted-line-label {
@@ -550,8 +537,8 @@ button {
 }
 
 .deleted-line .message-actions {
-  margin: 0;
-  min-height: 0;
+  position: static;
+  opacity: 1;
 }
 
 .tag {
@@ -566,6 +553,22 @@ button {
 .tag.experiment {
   background: var(--accent-soft);
   color: #f4caee;
+}
+
+.thread-summary {
+  margin-top: 8px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #6cb1ff;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.thread-summary:hover {
+  color: #92c4ff;
+  text-decoration: underline;
 }
 
 .composer {
