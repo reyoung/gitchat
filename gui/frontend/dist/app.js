@@ -4,6 +4,7 @@ const state = {
   app: null,
   selectedChannel: "",
   selectedThread: "",
+  attachmentCache: new Map(),
   draft: {
     body: "",
     replyTo: "",
@@ -44,6 +45,77 @@ const renderAvatar = (avatarURL, fallback, className = "avatar") => {
   return `<div class="${className} fallback">${escapeHTML(initialsForUser(fallback))}</div>`;
 };
 
+const markdownBlocks = (value) => {
+  const lines = String(value || "").replaceAll("\r\n", "\n").split("\n");
+  const blocks = [];
+  let paragraph = [];
+  let codeFence = null;
+  for (const line of lines) {
+    if (line.startsWith("```")) {
+      if (codeFence) {
+        blocks.push({ type: "code", language: codeFence, text: paragraph.join("\n") });
+        paragraph = [];
+        codeFence = null;
+      } else {
+        if (paragraph.length) {
+          blocks.push({ type: "paragraph", text: paragraph.join("\n") });
+          paragraph = [];
+        }
+        codeFence = line.slice(3).trim();
+      }
+      continue;
+    }
+    if (codeFence !== null) {
+      paragraph.push(line);
+      continue;
+    }
+    if (!line.trim()) {
+      if (paragraph.length) {
+        blocks.push({ type: "paragraph", text: paragraph.join("\n") });
+        paragraph = [];
+      }
+      continue;
+    }
+    paragraph.push(line);
+  }
+  if (paragraph.length) {
+    blocks.push({ type: codeFence !== null ? "code" : "paragraph", language: codeFence || "", text: paragraph.join("\n") });
+  }
+  return blocks;
+};
+
+const renderInlineMarkdown = (value) => {
+  let html = escapeHTML(value);
+  html = html.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_, alt, src) => {
+    const safeAlt = escapeHTML(alt);
+    if (src.startsWith("gitchat-attachment://")) {
+      try {
+        const url = new URL(src);
+        const commitHash = escapeHTML(url.hostname);
+        const path = escapeHTML(url.searchParams.get("path") || "");
+        return `<img class="message-image" data-attachment-commit="${commitHash}" data-attachment-path="${path}" alt="${safeAlt}" />`;
+      } catch {
+        return "";
+      }
+    }
+    return `<img class="message-image" src="${escapeHTML(src)}" alt="${safeAlt}" />`;
+  });
+  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" class="message-link" target="_blank" rel="noreferrer">$1</a>');
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/(^|[\s(])\*([^*]+)\*(?=[\s).,!?:;]|$)/g, "$1<em>$2</em>");
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  return html.replaceAll("\n", "<br />");
+};
+
+const renderMarkdown = (value) => markdownBlocks(value)
+  .map((block) => {
+    if (block.type === "code") {
+      return `<pre class="message-code"><code>${escapeHTML(block.text)}</code></pre>`;
+    }
+    return `<p>${renderInlineMarkdown(block.text)}</p>`;
+  })
+  .join("") || `<p>${renderInlineMarkdown(value || "")}</p>`;
+
 const showStatus = (kind, text) => {
   state.status = { kind, text };
   render();
@@ -65,6 +137,34 @@ const call = async (method, payload) => {
       window.setTimeout(() => reject(new Error(`Timed out calling ${method}`)), 5000);
     }),
   ]);
+};
+
+const resolveAttachmentImage = async (img) => {
+  const commitHash = img.dataset.attachmentCommit || "";
+  const path = img.dataset.attachmentPath || "";
+  if (!commitHash || !path) return;
+  const cacheKey = `${commitHash}:${path}`;
+  if (state.attachmentCache.has(cacheKey)) {
+    img.src = state.attachmentCache.get(cacheKey);
+    return;
+  }
+  img.classList.add("loading");
+  try {
+    const dataURL = await call("ResolveAttachment", { commitHash, path });
+    if (!dataURL) return;
+    state.attachmentCache.set(cacheKey, dataURL);
+    img.src = dataURL;
+  } catch (err) {
+    img.alt = err.message || "Failed to load image";
+  } finally {
+    img.classList.remove("loading");
+  }
+};
+
+const hydrateRenderedMarkdown = (root) => {
+  root.querySelectorAll("img[data-attachment-commit]").forEach((img) => {
+    resolveAttachmentImage(img);
+  });
 };
 
 const waitForBridge = async () => {
@@ -323,7 +423,7 @@ const renderMessageCard = (message, options = {}) => {
           ${edited}
         </div>
       </div>
-      <div class="message-body">${escapeHTML(message.body || "")}</div>
+      <div class="message-body markdown-body">${renderMarkdown(message.body || "")}</div>
       ${tags.length ? `<div class="message-tags">${tags.join("")}</div>` : ""}
       <div class="message-actions">${actions.join("")}</div>
     </article>
@@ -444,6 +544,7 @@ const render = () => {
     `
     : "";
   const sendLabel = state.draft.editOf ? "Save edit" : "Send message";
+  const canInsertImage = Boolean(state.selectedChannel);
 
   root.innerHTML = `
     <div class="shell">
@@ -484,12 +585,16 @@ const render = () => {
         <section class="composer">
           <div class="composer-card">
             ${replyBanner}
+            <div class="composer-toolbar">
+              <button type="button" data-insert-image="true" ${canInsertImage ? "" : "disabled"}>Insert image</button>
+              <div class="hint">Markdown supported. Cmd+Enter to send.</div>
+            </div>
             <div class="field" style="padding: 14px 14px 0;">
               <label>Message</label>
-              <textarea id="body" placeholder="Write a message. Use Cmd+Enter to send.">${escapeHTML(state.draft.body)}</textarea>
+              <textarea id="body" placeholder="Write a message. Use Cmd+Enter to send. Markdown and images are supported.">${escapeHTML(state.draft.body)}</textarea>
             </div>
             <div class="composer-actions">
-              <div class="hint">Cmd+Enter to send. Replies and edits are appended as new commits.</div>
+              <div class="hint">Replies, edits, and attachment uploads are appended as new commits.</div>
               <button class="primary" data-send="true">${sendLabel}</button>
             </div>
           </div>
@@ -550,6 +655,27 @@ const render = () => {
     button.addEventListener("click", submitMessage);
   });
 
+  root.querySelectorAll("[data-insert-image]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        const markdown = await call("InsertImage", {
+          userID: state.app?.currentUser || "",
+          channelID: state.selectedChannel,
+        });
+        if (!markdown) return;
+        const composer = root.querySelector("#body");
+        const insertion = `${state.draft.body && !state.draft.body.endsWith("\n") ? "\n" : ""}${markdown}\n`;
+        state.draft.body += insertion;
+        if (composer) {
+          composer.value = state.draft.body;
+          composer.focus();
+        }
+      } catch (err) {
+        showStatus("error", err.message || String(err));
+      }
+    });
+  });
+
   root.querySelectorAll("[data-reply-hash]").forEach((button) => {
     button.addEventListener("click", () => startReply(button.dataset.replyHash || ""));
   });
@@ -569,6 +695,8 @@ const render = () => {
   root.querySelectorAll("[data-clear-mode]").forEach((button) => {
     button.addEventListener("click", clearComposerMode);
   });
+
+  hydrateRenderedMarkdown(root);
 };
 
 const bootstrap = async () => {

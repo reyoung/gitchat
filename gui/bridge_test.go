@@ -39,6 +39,12 @@ func (f *fakeService) SendMessage(_ context.Context, in app.SendMessageInput) er
 	f.sendInput = in
 	return f.defaultError
 }
+func (f *fakeService) UploadImageAttachment(context.Context, string, string, string) (app.UploadedAttachment, error) {
+	return app.UploadedAttachment{Markdown: "![img](gitchat-attachment://abc?path=attachments%2Fresearch%2Fimage.png)"}, f.defaultError
+}
+func (f *fakeService) LoadAttachmentDataURL(context.Context, string, string) (string, error) {
+	return "data:image/png;base64,AAAA", f.defaultError
+}
 func (f *fakeService) ListChannels(context.Context) ([]model.Channel, error) {
 	return f.channels, f.defaultError
 }

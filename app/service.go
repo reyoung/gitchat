@@ -2,10 +2,14 @@ package app
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"mime"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -449,11 +453,150 @@ func (s *Service) ListMessagesByChannel(ctx context.Context, channelID string) (
 	return s.Store.ListMessagesByChannel(ctx, channelID)
 }
 
+type UploadedAttachment struct {
+	CommitHash string
+	Path       string
+	Markdown   string
+}
+
+func (s *Service) UploadImageAttachment(ctx context.Context, userID, channelID, sourcePath string) (UploadedAttachment, error) {
+	userID = strings.TrimSpace(userID)
+	channelID = strings.TrimSpace(channelID)
+	sourcePath = strings.TrimSpace(sourcePath)
+	if userID == "" || channelID == "" || sourcePath == "" {
+		return UploadedAttachment{}, fmt.Errorf("user, channel, and source path are required")
+	}
+	if err := s.Sync(ctx); err != nil {
+		return UploadedAttachment{}, err
+	}
+	if err := s.ensureUserBranch(ctx, userID); err != nil {
+		return UploadedAttachment{}, err
+	}
+	repoSpec := s.repoSpec()
+	if repoSpec == "" {
+		return UploadedAttachment{}, fmt.Errorf("repo spec is required")
+	}
+	destPath := filepath.ToSlash(filepath.Join("attachments", channelID, fmt.Sprintf("%d-%s", s.Now().UTC().UnixNano(), filepath.Base(sourcePath))))
+	tmpDir, err := os.MkdirTemp("", "gitchat-upload-*")
+	if err != nil {
+		return UploadedAttachment{}, err
+	}
+	defer os.RemoveAll(tmpDir)
+
+	if err := runGit(ctx, "", "clone", "--branch", "users/"+userID, "--single-branch", repoSpec, tmpDir); err != nil {
+		return UploadedAttachment{}, err
+	}
+	if err := runGit(ctx, tmpDir, "config", "user.name", userID); err != nil {
+		return UploadedAttachment{}, err
+	}
+	if err := runGit(ctx, tmpDir, "config", "user.email", fmt.Sprintf("%s@gitchat.local", userID)); err != nil {
+		return UploadedAttachment{}, err
+	}
+	if err := runGit(ctx, tmpDir, "lfs", "install", "--local"); err != nil {
+		return UploadedAttachment{}, err
+	}
+	if err := runGit(ctx, tmpDir, "lfs", "track", "attachments/**"); err != nil {
+		return UploadedAttachment{}, err
+	}
+	if err := os.MkdirAll(filepath.Join(tmpDir, filepath.Dir(destPath)), 0o755); err != nil {
+		return UploadedAttachment{}, err
+	}
+	data, err := os.ReadFile(sourcePath)
+	if err != nil {
+		return UploadedAttachment{}, err
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, destPath), data, 0o644); err != nil {
+		return UploadedAttachment{}, err
+	}
+	if err := runGit(ctx, tmpDir, "add", ".gitattributes", destPath); err != nil {
+		return UploadedAttachment{}, err
+	}
+	if err := runGit(ctx, tmpDir, "commit", "-m", fmt.Sprintf("upload attachment %s", filepath.Base(destPath))); err != nil {
+		return UploadedAttachment{}, err
+	}
+	if err := runGit(ctx, tmpDir, "push", "origin", "HEAD:users/"+userID); err != nil {
+		return UploadedAttachment{}, err
+	}
+	commitHash, err := runGitOutput(ctx, tmpDir, "rev-parse", "HEAD")
+	if err != nil {
+		return UploadedAttachment{}, err
+	}
+	if err := s.Sync(ctx); err != nil {
+		return UploadedAttachment{}, err
+	}
+	markdown := fmt.Sprintf("![%s](gitchat-attachment://%s?path=%s)", filepath.Base(destPath), strings.TrimSpace(commitHash), url.QueryEscape(destPath))
+	return UploadedAttachment{
+		CommitHash: strings.TrimSpace(commitHash),
+		Path:       destPath,
+		Markdown:   markdown,
+	}, nil
+}
+
+func (s *Service) LoadAttachmentDataURL(ctx context.Context, commitHash, relPath string) (string, error) {
+	commitHash = strings.TrimSpace(commitHash)
+	relPath = strings.TrimSpace(relPath)
+	if commitHash == "" || relPath == "" {
+		return "", fmt.Errorf("commit hash and path are required")
+	}
+	repoSpec := s.repoSpec()
+	if repoSpec == "" {
+		return "", fmt.Errorf("repo spec is required")
+	}
+	tmpDir, err := os.MkdirTemp("", "gitchat-attachment-*")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(tmpDir)
+
+	if err := runGit(ctx, "", "clone", repoSpec, tmpDir); err != nil {
+		return "", err
+	}
+	if err := runGit(ctx, tmpDir, "checkout", commitHash); err != nil {
+		return "", err
+	}
+	_ = runGit(ctx, tmpDir, "lfs", "install", "--local")
+	_ = runGit(ctx, tmpDir, "lfs", "pull")
+
+	data, err := os.ReadFile(filepath.Join(tmpDir, filepath.FromSlash(relPath)))
+	if err != nil {
+		return "", err
+	}
+	mimeType := mime.TypeByExtension(strings.ToLower(filepath.Ext(relPath)))
+	if mimeType == "" {
+		mimeType = "application/octet-stream"
+	}
+	return "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(data), nil
+}
+
 func shortSHA(sha string) string {
 	if len(sha) > 12 {
 		return sha[:12]
 	}
 	return sha
+}
+
+func (s *Service) repoSpec() string {
+	if strings.TrimSpace(s.Repo.RemoteURL) != "" {
+		return strings.TrimSpace(s.Repo.RemoteURL)
+	}
+	return strings.TrimSpace(s.Repo.Dir)
+}
+
+func runGit(ctx context.Context, dir string, args ...string) error {
+	_, err := runGitOutput(ctx, dir, args...)
+	return err
+}
+
+func runGitOutput(ctx context.Context, dir string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 func (s *Service) pushBranches(ctx context.Context, branches ...string) error {

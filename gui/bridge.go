@@ -8,6 +8,7 @@ import (
 
 	"github.com/reyoung/gitchat/app"
 	"github.com/reyoung/gitchat/model"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type serviceAPI interface {
@@ -19,6 +20,8 @@ type serviceAPI interface {
 	CreateExperiment(context.Context, string, string, string, string, string) error
 	RetainExperimentAttempt(context.Context, string, string) error
 	SendMessage(context.Context, app.SendMessageInput) error
+	UploadImageAttachment(context.Context, string, string, string) (app.UploadedAttachment, error)
+	LoadAttachmentDataURL(context.Context, string, string) (string, error)
 	ListChannels(context.Context) ([]model.Channel, error)
 	ListUsers(context.Context) ([]model.User, error)
 	ListExperiments(context.Context) ([]model.Experiment, error)
@@ -85,6 +88,16 @@ type CreateUserRequest struct {
 type UpdateUserProfileRequest struct {
 	UserID    string `json:"userID"`
 	AvatarURL string `json:"avatarURL"`
+}
+
+type InsertImageRequest struct {
+	UserID    string `json:"userID"`
+	ChannelID string `json:"channelID"`
+}
+
+type ResolveAttachmentRequest struct {
+	CommitHash string `json:"commitHash"`
+	Path       string `json:"path"`
 }
 
 type CreateChannelRequest struct {
@@ -202,6 +215,41 @@ func (b *Bridge) CreateExperiment(req CreateExperimentRequest) (AppState, error)
 		return AppState{}, err
 	}
 	return b.loadState("")
+}
+
+func (b *Bridge) InsertImage(req InsertImageRequest) (string, error) {
+	userID := firstNonEmpty(req.UserID, b.defaults.UserName)
+	channelID := strings.TrimSpace(req.ChannelID)
+	if userID == "" {
+		return "", fmt.Errorf("user is required")
+	}
+	if channelID == "" {
+		return "", fmt.Errorf("channel is required")
+	}
+	path, err := runtime.OpenFileDialog(b.ctx, runtime.OpenDialogOptions{
+		Title: "Insert image",
+		Filters: []runtime.FileFilter{
+			{
+				DisplayName: "Images",
+				Pattern:     "*.png;*.jpg;*.jpeg;*.gif;*.webp;*.svg",
+			},
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(path) == "" {
+		return "", nil
+	}
+	attachment, err := b.svc.UploadImageAttachment(context.Background(), userID, channelID, path)
+	if err != nil {
+		return "", err
+	}
+	return attachment.Markdown, nil
+}
+
+func (b *Bridge) ResolveAttachment(req ResolveAttachmentRequest) (string, error) {
+	return b.svc.LoadAttachmentDataURL(context.Background(), strings.TrimSpace(req.CommitHash), strings.TrimSpace(req.Path))
 }
 
 func (b *Bridge) RetainExperiment(req RetainAttemptRequest) (AppState, error) {
