@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -65,6 +66,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 			subject TEXT NOT NULL,
 			body TEXT NOT NULL,
 			reply_to TEXT NOT NULL DEFAULT '',
+			edit_of TEXT NOT NULL DEFAULT '',
 			follows_json TEXT NOT NULL,
 			experiment_id TEXT NOT NULL DEFAULT '',
 			experiment_sha TEXT NOT NULL DEFAULT '',
@@ -93,6 +95,9 @@ func (s *Store) Migrate(ctx context.Context) error {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
 			return fmt.Errorf("migrate %q: %w", stmt, err)
 		}
+	}
+	if _, err := s.db.ExecContext(ctx, `ALTER TABLE messages ADD COLUMN edit_of TEXT NOT NULL DEFAULT ''`); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("add messages.edit_of: %w", err)
 	}
 	return nil
 }
@@ -140,8 +145,8 @@ func (s *Store) ReplaceUserMessages(ctx context.Context, branch string, messages
 		return err
 	}
 	stmt, err := tx.PrepareContext(ctx, `INSERT INTO messages(
-			commit_hash, user_id, branch, channel_id, subject, body, reply_to, follows_json, experiment_id, experiment_sha, created_at
-		) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+			commit_hash, user_id, branch, channel_id, subject, body, reply_to, edit_of, follows_json, experiment_id, experiment_sha, created_at
+		) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -159,6 +164,7 @@ func (s *Store) ReplaceUserMessages(ctx context.Context, branch string, messages
 			message.Subject,
 			message.Body,
 			message.ReplyTo,
+			message.EditOf,
 			string(follows),
 			message.ExperimentID,
 			message.ExperimentSHA,
@@ -275,7 +281,7 @@ func (s *Store) ListExperiments(ctx context.Context) ([]model.Experiment, error)
 }
 
 func (s *Store) ListMessagesByChannel(ctx context.Context, channelID string) ([]model.Message, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT commit_hash, user_id, branch, channel_id, subject, body, reply_to, follows_json, experiment_id, experiment_sha, created_at
+	rows, err := s.db.QueryContext(ctx, `SELECT commit_hash, user_id, branch, channel_id, subject, body, reply_to, edit_of, follows_json, experiment_id, experiment_sha, created_at
 		FROM messages WHERE channel_id = ? ORDER BY created_at, commit_hash`, channelID)
 	if err != nil {
 		return nil, err
@@ -294,6 +300,7 @@ func (s *Store) ListMessagesByChannel(ctx context.Context, channelID string) ([]
 			&message.Subject,
 			&message.Body,
 			&message.ReplyTo,
+			&message.EditOf,
 			&followsJSON,
 			&message.ExperimentID,
 			&message.ExperimentSHA,

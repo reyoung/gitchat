@@ -3,9 +3,11 @@ const api = () => window.go?.gui?.Bridge;
 const state = {
   app: null,
   selectedChannel: "",
+  selectedThread: "",
   draft: {
     body: "",
     replyTo: "",
+    editOf: "",
     experimentSHA: "",
   },
   modal: null,
@@ -65,6 +67,12 @@ const refreshState = async (selectedChannel = state.selectedChannel) => {
   const appState = await call("GetState", selectedChannel || "");
   state.app = appState;
   state.selectedChannel = appState.selectedChannel || "";
+  if (state.selectedThread) {
+    const visible = getVisibleMessages(appState.messages || []);
+    if (!visible.some((message) => message.commitHash === state.selectedThread)) {
+      state.selectedThread = "";
+    }
+  }
   render();
 };
 
@@ -76,6 +84,7 @@ const submitMessage = async () => {
       subject: "",
       body: state.draft.body,
       replyTo: state.draft.replyTo,
+      editOf: state.draft.editOf,
       experimentID: "",
       experimentSHA: state.draft.experimentSHA,
     });
@@ -83,9 +92,10 @@ const submitMessage = async () => {
     state.selectedChannel = appState.selectedChannel || "";
     state.draft.body = "";
     state.draft.replyTo = "";
+    state.draft.editOf = "";
     state.draft.experimentSHA = "";
     render();
-    showStatus("success", "Message sent");
+    showStatus("success", "Message saved");
   } catch (err) {
     showStatus("error", err.message || String(err));
   }
@@ -198,6 +208,7 @@ const submitModal = async () => {
 };
 
 const startReply = (commitHash) => {
+  state.draft.editOf = "";
   state.draft.replyTo = commitHash || "";
   render();
   const composer = document.querySelector("#body");
@@ -206,44 +217,142 @@ const startReply = (commitHash) => {
 
 const clearReply = () => {
   state.draft.replyTo = "";
+  state.draft.editOf = "";
   render();
   const composer = document.querySelector("#body");
   if (composer) composer.focus();
 };
 
+const startEdit = (commitHash) => {
+  const message = getVisibleMessages(state.app?.messages || []).find((item) => item.commitHash === commitHash);
+  if (!message) return;
+  state.draft.replyTo = "";
+  state.draft.editOf = commitHash;
+  state.draft.body = message.body || "";
+  render();
+  const composer = document.querySelector("#body");
+  if (composer) composer.focus();
+};
+
+const clearComposerMode = () => {
+  state.draft.replyTo = "";
+  state.draft.editOf = "";
+  render();
+};
+
+const openThread = (commitHash) => {
+  state.selectedThread = commitHash || "";
+  render();
+};
+
+const closeThread = () => {
+  state.selectedThread = "";
+  render();
+};
+
+const getVisibleMessages = (messages) => {
+  const latestEditByTarget = new Map();
+  const editCounts = new Map();
+  for (const message of messages) {
+    if (!message.editOf) continue;
+    editCounts.set(message.editOf, (editCounts.get(message.editOf) || 0) + 1);
+    latestEditByTarget.set(message.editOf, message);
+  }
+  return messages
+    .filter((message) => !message.editOf)
+    .map((message) => {
+      const latestEdit = latestEditByTarget.get(message.commitHash);
+      return {
+        ...message,
+        body: latestEdit ? latestEdit.body : message.body,
+        subject: latestEdit ? latestEdit.subject : message.subject,
+        editedAt: latestEdit ? latestEdit.createdAt : "",
+        editCount: editCounts.get(message.commitHash) || 0,
+      };
+    });
+};
+
+const getThreadRoot = (messageMap, message) => {
+  let current = message;
+  while (current?.replyTo && messageMap.has(current.replyTo)) {
+    current = messageMap.get(current.replyTo);
+  }
+  return current?.commitHash || message.commitHash;
+};
+
+const getThreadRoots = (messages) => {
+  const byHash = new Map(messages.map((message) => [message.commitHash, message]));
+  const roots = messages.filter((message) => !message.replyTo || !byHash.has(message.replyTo));
+  return roots;
+};
+
+const getThreadMessages = (messages, rootHash) => {
+  const byHash = new Map(messages.map((message) => [message.commitHash, message]));
+  return messages.filter((message) => getThreadRoot(byHash, message) === rootHash);
+};
+
+const renderMessageCard = (message, options = {}) => {
+  const mine = message.userID === state.app.currentUser ? " mine" : "";
+  const reply = message.replyTo ? `<span class="message-thread">reply to ${escapeHTML(message.replyTo.slice(0, 10))}</span>` : "";
+  const edited = message.editCount ? `<span class="message-thread">edited ${message.editCount}x${message.editedAt ? ` · last ${escapeHTML(message.editedAt)}` : ""}</span>` : "";
+  const tags = [];
+  if (message.experimentID) {
+    const sha = message.experimentSHA ? ` · ${escapeHTML(message.experimentSHA)}` : "";
+    tags.push(`<span class="tag experiment">experiment ${escapeHTML(message.experimentID)}${sha}</span>`);
+  }
+  const actions = [
+    `<button type="button" class="message-action" data-reply-hash="${escapeHTML(message.commitHash)}">Reply</button>`,
+  ];
+  if (message.userID === state.app.currentUser) {
+    actions.push(`<button type="button" class="message-action" data-edit-hash="${escapeHTML(message.commitHash)}">Edit</button>`);
+  }
+  if (!options.hideThreadButton) {
+    actions.push(`<button type="button" class="message-action" data-open-thread="${escapeHTML(message.commitHash)}">Thread</button>`);
+  }
+  return `
+    <article class="message-card${mine}">
+      <div class="message-top">
+        <span class="message-author">${escapeHTML(message.userID)}</span>
+        <span class="message-time">${escapeHTML(message.createdAt)}</span>
+        <span class="message-sha">${escapeHTML(message.shortHash)}</span>
+        ${reply}
+        ${edited}
+      </div>
+      <div class="message-body">${escapeHTML(message.body || "")}</div>
+      ${tags.length ? `<div class="message-tags">${tags.join("")}</div>` : ""}
+      <div class="message-actions">${actions.join("")}</div>
+    </article>
+  `;
+};
+
 const renderMessages = () => {
-  if (!state.app?.messages?.length) {
+  const visibleMessages = getVisibleMessages(state.app?.messages || []);
+  if (!visibleMessages.length) {
     return `
       <div class="empty-state">
         No messages yet. Start the thread in <strong>#${escapeHTML(state.selectedChannel || "channel")}</strong>.
       </div>
     `;
   }
-  return state.app.messages
-    .map((message) => {
-      const mine = message.userID === state.app.currentUser ? " mine" : "";
-      const reply = message.replyTo ? `<span class="message-thread">reply to ${escapeHTML(message.replyTo.slice(0, 10))}</span>` : "";
-      const tags = [];
-      if (message.experimentID) {
-        const sha = message.experimentSHA ? ` · ${escapeHTML(message.experimentSHA)}` : "";
-        tags.push(`<span class="tag experiment">experiment ${escapeHTML(message.experimentID)}${sha}</span>`);
-      }
-      return `
-        <article class="message-card${mine}">
-          <div class="message-top">
-            <span class="message-author">${escapeHTML(message.userID)}</span>
-            <span class="message-time">${escapeHTML(message.createdAt)}</span>
-            <span class="message-sha">${escapeHTML(message.shortHash)}</span>
-            ${reply}
-          </div>
-          <div class="message-body">${escapeHTML(message.body || "")}</div>
-          ${tags.length ? `<div class="message-tags">${tags.join("")}</div>` : ""}
-          <div class="message-actions">
-            <button type="button" class="message-action" data-reply-hash="${escapeHTML(message.commitHash)}">Reply</button>
-          </div>
-        </article>
-      `;
-    })
+  if (state.selectedThread) {
+    const threadMessages = getThreadMessages(visibleMessages, state.selectedThread);
+    if (!threadMessages.length) {
+      state.selectedThread = "";
+      return renderMessages();
+    }
+    return `
+      <div class="thread-page">
+        <div class="thread-header">
+          <button type="button" class="thread-back" data-close-thread="true">Back to channel</button>
+          <div class="thread-meta">${threadMessages.length} message${threadMessages.length === 1 ? "" : "s"} in thread</div>
+        </div>
+        ${threadMessages.map((message) => renderMessageCard(message, { hideThreadButton: true })).join("")}
+      </div>
+    `;
+  }
+  const roots = getThreadRoots(visibleMessages);
+  return roots
+    .map((message) => renderMessageCard(message))
     .join("");
 };
 
@@ -325,14 +434,22 @@ const render = () => {
   const selectedMeta = state.selectedChannel
     ? `Channel branch: channels/${escapeHTML(state.selectedChannel)}`
     : "Create a channel to start chatting";
-  const replyBanner = state.draft.replyTo
+  const replyBanner = state.draft.editOf
+    ? `
+      <div class="reply-banner">
+        <span>Editing ${escapeHTML(state.draft.editOf.slice(0, 10))} as a new commit</span>
+        <button type="button" data-clear-mode="true">Cancel edit</button>
+      </div>
+    `
+    : state.draft.replyTo
     ? `
       <div class="reply-banner">
         <span>Replying to ${escapeHTML(state.draft.replyTo.slice(0, 10))}</span>
-        <button type="button" data-clear-reply="true">Cancel reply</button>
+        <button type="button" data-clear-mode="true">Cancel reply</button>
       </div>
     `
     : "";
+  const sendLabel = state.draft.editOf ? "Save edit" : "Send message";
 
   root.innerHTML = `
     <div class="shell">
@@ -385,8 +502,8 @@ const render = () => {
               <textarea id="body" placeholder="Write a message. Use Cmd+Enter to send.">${escapeHTML(state.draft.body)}</textarea>
             </div>
             <div class="composer-actions">
-              <div class="hint">Cmd+Enter to send. Replies are attached from each message card.</div>
-              <button class="primary" data-send="true">Send message</button>
+              <div class="hint">Cmd+Enter to send. Replies and edits are appended as new commits.</div>
+              <button class="primary" data-send="true">${sendLabel}</button>
             </div>
           </div>
         </section>
@@ -488,8 +605,20 @@ const render = () => {
     button.addEventListener("click", () => startReply(button.dataset.replyHash || ""));
   });
 
-  root.querySelectorAll("[data-clear-reply]").forEach((button) => {
-    button.addEventListener("click", clearReply);
+  root.querySelectorAll("[data-edit-hash]").forEach((button) => {
+    button.addEventListener("click", () => startEdit(button.dataset.editHash || ""));
+  });
+
+  root.querySelectorAll("[data-open-thread]").forEach((button) => {
+    button.addEventListener("click", () => openThread(button.dataset.openThread || ""));
+  });
+
+  root.querySelectorAll("[data-close-thread]").forEach((button) => {
+    button.addEventListener("click", closeThread);
+  });
+
+  root.querySelectorAll("[data-clear-mode]").forEach((button) => {
+    button.addEventListener("click", clearComposerMode);
   });
 };
 

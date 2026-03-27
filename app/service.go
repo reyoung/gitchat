@@ -285,6 +285,7 @@ type SendMessageInput struct {
 	Subject       string
 	Body          string
 	ReplyTo       string
+	EditOf        string
 	Follows       []string
 	ExperimentID  string
 	ExperimentSHA string
@@ -301,7 +302,7 @@ func (s *Service) SendMessage(ctx context.Context, in SendMessageInput) error {
 	if err := s.ensureUserBranch(ctx, in.UserID); err != nil {
 		return err
 	}
-	if len(in.Follows) == 0 {
+	if len(in.Follows) == 0 && strings.TrimSpace(in.EditOf) == "" {
 		heads, err := s.ChannelHeads(ctx, in.ChannelID)
 		if err != nil {
 			return err
@@ -333,6 +334,7 @@ func (s *Service) SendMessage(ctx context.Context, in SendMessageInput) error {
 				"Channel":        in.ChannelID,
 				"Follows":        strings.Join(in.Follows, ","),
 				"Reply-To":       in.ReplyTo,
+				"Edit-Of":        in.EditOf,
 				"Experiment":     in.ExperimentID,
 				"Experiment-SHA": in.ExperimentSHA,
 				"Created-At":     s.Now().UTC().Format(time.RFC3339),
@@ -367,12 +369,18 @@ func (s *Service) ChannelHeads(ctx context.Context, channelID string) ([]string,
 	}
 	referenced := map[string]bool{}
 	for _, message := range messages {
+		if strings.TrimSpace(message.EditOf) != "" {
+			continue
+		}
 		for _, followed := range message.Follows {
 			referenced[followed] = true
 		}
 	}
 	heads := make([]string, 0)
 	for _, message := range messages {
+		if strings.TrimSpace(message.EditOf) != "" {
+			continue
+		}
 		if !referenced[message.CommitHash] {
 			heads = append(heads, message.CommitHash)
 		}

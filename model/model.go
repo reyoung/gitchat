@@ -29,6 +29,7 @@ type Message struct {
 	Subject       string
 	Body          string
 	ReplyTo       string
+	EditOf        string
 	Follows       []string
 	ExperimentID  string
 	ExperimentSHA string

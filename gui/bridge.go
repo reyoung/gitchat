@@ -57,6 +57,7 @@ type MessageView struct {
 	Subject       string `json:"subject"`
 	Body          string `json:"body"`
 	ReplyTo       string `json:"replyTo"`
+	EditOf        string `json:"editOf"`
 	ExperimentID  string `json:"experimentID"`
 	ExperimentSHA string `json:"experimentSHA"`
 	CreatedAt     string `json:"createdAt"`
@@ -68,6 +69,7 @@ type SendMessageRequest struct {
 	Subject       string `json:"subject"`
 	Body          string `json:"body"`
 	ReplyTo       string `json:"replyTo"`
+	EditOf        string `json:"editOf"`
 	ExperimentID  string `json:"experimentID"`
 	ExperimentSHA string `json:"experimentSHA"`
 }
@@ -137,6 +139,7 @@ func (b *Bridge) SendMessage(req SendMessageRequest) (AppState, error) {
 		Subject:       subject,
 		Body:          body,
 		ReplyTo:       strings.TrimSpace(req.ReplyTo),
+		EditOf:        strings.TrimSpace(req.EditOf),
 		ExperimentID:  strings.TrimSpace(req.ExperimentID),
 		ExperimentSHA: strings.TrimSpace(req.ExperimentSHA),
 	}); err != nil {
@@ -248,6 +251,7 @@ func (b *Bridge) loadState(selectedChannel string) (AppState, error) {
 			Subject:       message.Subject,
 			Body:          message.Body,
 			ReplyTo:       message.ReplyTo,
+			EditOf:        message.EditOf,
 			ExperimentID:  message.ExperimentID,
 			ExperimentSHA: shortSHA(message.ExperimentSHA),
 			CreatedAt:     formatTimestamp(message.CreatedAt),

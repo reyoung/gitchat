@@ -230,6 +230,75 @@ func TestSendMessageAutoCreatesMissingUser(t *testing.T) {
 	}
 }
 
+func TestEditMessageAppendsCommitWithoutChangingChannelHeads(t *testing.T) {
+	ctx := context.Background()
+	repoDir := testutil.NewRepo(t)
+	dbPath := filepath.Join(t.TempDir(), "cache.db")
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := NewService(gitrepo.New(repoDir), st)
+	svc.Now = func() time.Time { return time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC) }
+
+	if err := svc.Init(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.CreateUser(ctx, "alice", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.CreateChannel(ctx, "research", "alice", "Research"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SendMessage(ctx, SendMessageInput{
+		UserID:    "alice",
+		ChannelID: "research",
+		Body:      "hello",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	messages, err := st.ListMessagesByChannel(ctx, "research")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(messages))
+	}
+	original := messages[0]
+	if err := svc.SendMessage(ctx, SendMessageInput{
+		UserID:    "alice",
+		ChannelID: "research",
+		Body:      "hello, edited",
+		EditOf:    original.CommitHash,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	messages, err = st.ListMessagesByChannel(ctx, "research")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 2 {
+		t.Fatalf("expected original + edit commit, got %d", len(messages))
+	}
+	editFound := false
+	for _, message := range messages {
+		if message.EditOf == original.CommitHash {
+			editFound = true
+		}
+	}
+	if !editFound {
+		t.Fatalf("expected edit commit targeting %s, got %#v", original.CommitHash, messages)
+	}
+	heads, err := svc.ChannelHeads(ctx, "research")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(heads) != 1 || heads[0] != original.CommitHash {
+		t.Fatalf("expected edit commit to not change channel heads, got %#v", heads)
+	}
+}
+
 func TestCreateUserAndChannelWorkAgainstRemoteRepo(t *testing.T) {
 	ctx := context.Background()
 	repoSpec := testutil.NewRemoteRepo(t)
