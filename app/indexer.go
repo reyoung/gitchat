@@ -41,6 +41,48 @@ func (i *Indexer) Run(ctx context.Context) error {
 	return nil
 }
 
+func (i *Indexer) RunRefs(ctx context.Context, names ...string) error {
+	if err := i.Store.Migrate(ctx); err != nil {
+		return err
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	wanted := make(map[string]bool, len(names))
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name != "" {
+			wanted[name] = true
+		}
+	}
+	if len(wanted) == 0 {
+		return nil
+	}
+	refs, err := i.Repo.ListRefs(ctx)
+	if err != nil {
+		return err
+	}
+	for _, ref := range refs {
+		if !wanted[ref.Name] {
+			continue
+		}
+		cached, ok, err := i.Store.GetRefHead(ctx, ref.Name)
+		if err != nil {
+			return err
+		}
+		if ok && cached == ref.HeadHash {
+			continue
+		}
+		if err := i.indexRef(ctx, ref); err != nil {
+			return fmt.Errorf("index %s: %w", ref.Name, err)
+		}
+		if err := i.Store.UpdateRefHead(ctx, ref); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (i *Indexer) indexRef(ctx context.Context, ref model.RefState) error {
 	sourceRef, canonicalRef, ok := normalizeTrackedRef(ref.Name)
 	if !ok {

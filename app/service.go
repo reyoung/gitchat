@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	git "github.com/go-git/go-git/v5"
@@ -27,14 +28,21 @@ type Service struct {
 	Store      *store.Store
 	Now        func() time.Time
 	RemoteName string
+
+	SyncMinInterval time.Duration
+
+	syncMu          sync.Mutex
+	lastFetchAt     time.Time
+	attachmentCache sync.Map
 }
 
 func NewService(repo *gitrepo.Repo, store *store.Store) *Service {
 	return &Service{
-		Repo:       repo,
-		Store:      store,
-		Now:        time.Now,
-		RemoteName: "",
+		Repo:            repo,
+		Store:           store,
+		Now:             time.Now,
+		RemoteName:      "",
+		SyncMinInterval: 2 * time.Second,
 	}
 }
 
@@ -43,12 +51,49 @@ func (s *Service) Init(ctx context.Context) error {
 }
 
 func (s *Service) Sync(ctx context.Context) error {
-	if s.RemoteName != "" {
-		if err := s.Repo.Fetch(ctx, s.RemoteName); err != nil && !errors.Is(err, transport.ErrEmptyRemoteRepository) && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+	return s.syncState(ctx, true, false)
+}
+
+func (s *Service) forceSync(ctx context.Context) error {
+	return s.syncState(ctx, true, true)
+}
+
+func (s *Service) refreshRefs(ctx context.Context, refs ...string) error {
+	return s.syncRefs(ctx, refs, false, false)
+}
+
+func (s *Service) syncState(ctx context.Context, fetchRemote bool, forceFetch bool) error {
+	return s.syncRefs(ctx, nil, fetchRemote, forceFetch)
+}
+
+func (s *Service) syncRefs(ctx context.Context, refs []string, fetchRemote bool, forceFetch bool) error {
+	s.syncMu.Lock()
+	defer s.syncMu.Unlock()
+	if fetchRemote {
+		if err := s.fetchRemote(ctx, forceFetch); err != nil {
 			return err
 		}
 	}
-	return (&Indexer{Repo: s.Repo, Store: s.Store}).Run(ctx)
+	indexer := &Indexer{Repo: s.Repo, Store: s.Store}
+	if len(refs) == 0 {
+		return indexer.Run(ctx)
+	}
+	return indexer.RunRefs(ctx, refs...)
+}
+
+func (s *Service) fetchRemote(ctx context.Context, force bool) error {
+	if s.RemoteName == "" {
+		return nil
+	}
+	if !force && s.SyncMinInterval > 0 && !s.lastFetchAt.IsZero() && s.Now().Sub(s.lastFetchAt) < s.SyncMinInterval {
+		return nil
+	}
+	err := s.Repo.Fetch(ctx, s.RemoteName)
+	if err != nil && !errors.Is(err, transport.ErrEmptyRemoteRepository) && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		return err
+	}
+	s.lastFetchAt = s.Now()
+	return nil
 }
 
 func (s *Service) CreateUser(ctx context.Context, userID, keyPath string) error {
@@ -98,7 +143,7 @@ func (s *Service) CreateUserProfile(ctx context.Context, userID, keyPath, avatar
 		if err := s.pushBranches(ctx, "main", "users/"+userID); err != nil {
 			return err
 		}
-		return s.Sync(ctx)
+		return s.refreshRefs(ctx, "main", "users/"+userID)
 	})
 }
 
@@ -134,7 +179,7 @@ func (s *Service) UpdateUserProfile(ctx context.Context, userID, avatarURL strin
 		if err := s.pushBranches(ctx, branch); err != nil {
 			return err
 		}
-		return s.Sync(ctx)
+		return s.refreshRefs(ctx, branch)
 	})
 }
 
@@ -172,7 +217,7 @@ func (s *Service) CreateChannel(ctx context.Context, channelID, creator, title s
 		if err := s.pushBranches(ctx, branch); err != nil {
 			return err
 		}
-		return s.Sync(ctx)
+		return s.refreshRefs(ctx, branch)
 	})
 }
 
@@ -204,7 +249,7 @@ func (s *Service) AddChannelMember(ctx context.Context, channelID, actor, member
 		if err := s.pushBranches(ctx, branch); err != nil {
 			return err
 		}
-		return s.Sync(ctx)
+		return s.refreshRefs(ctx, branch)
 	})
 }
 
@@ -271,7 +316,7 @@ func (s *Service) CreateExperiment(ctx context.Context, experimentID, actor, tit
 		if err := s.pushBranches(ctx, "main", "experiments/"+experimentID); err != nil {
 			return err
 		}
-		return s.Sync(ctx)
+		return s.refreshRefs(ctx, "main", "experiments/"+experimentID)
 	})
 }
 
@@ -305,7 +350,7 @@ func (s *Service) RetainExperimentAttempt(ctx context.Context, experimentID, ret
 		if err := s.pushBranches(ctx, branch); err != nil {
 			return err
 		}
-		return s.Sync(ctx)
+		return s.refreshRefs(ctx, branch)
 	})
 }
 
@@ -387,7 +432,7 @@ func (s *Service) SendMessage(ctx context.Context, in SendMessageInput) error {
 		if err := s.pushBranches(ctx, branch); err != nil {
 			return err
 		}
-		return s.Sync(ctx)
+		return s.refreshRefs(ctx, branch)
 	})
 }
 
@@ -462,7 +507,7 @@ func (s *Service) UploadImageAttachment(ctx context.Context, userID, channelID, 
 		return UploadedAttachment{}, err
 	}
 	uploaded.Markdown = fmt.Sprintf("![%s](%s)", filepath.Base(destPath), buildGitAssetURI(uploaded.CommitHash, uploaded.Path))
-	if err := s.Sync(ctx); err != nil {
+	if err := s.forceSync(ctx); err != nil {
 		return UploadedAttachment{}, err
 	}
 	return uploaded, nil
@@ -530,6 +575,9 @@ func (s *Service) SetUserAvatarFromFile(ctx context.Context, userID, sourcePath 
 	if err != nil {
 		return "", err
 	}
+	if err := s.forceSync(ctx); err != nil {
+		return "", err
+	}
 	avatarURL := buildGitAssetURI(uploaded.CommitHash, uploaded.Path)
 	if err := s.UpdateUserProfile(ctx, userID, avatarURL); err != nil {
 		return "", err
@@ -551,10 +599,11 @@ func (s *Service) uploadLFSAssetToUserBranch(ctx context.Context, userID, destPa
 	if err := runGit(ctx, "", "clone", "--branch", "users/"+userID, "--single-branch", repoSpec, tmpDir); err != nil {
 		return UploadedAttachment{}, err
 	}
-	if err := runGit(ctx, tmpDir, "config", "user.name", userID); err != nil {
+	name, email := s.commitIdentity(userID)
+	if err := runGit(ctx, tmpDir, "config", "user.name", name); err != nil {
 		return UploadedAttachment{}, err
 	}
-	if err := runGit(ctx, tmpDir, "config", "user.email", fmt.Sprintf("%s@gitchat.local", userID)); err != nil {
+	if err := runGit(ctx, tmpDir, "config", "user.email", email); err != nil {
 		return UploadedAttachment{}, err
 	}
 	if err := runGit(ctx, tmpDir, "lfs", "install", "--local"); err != nil {
@@ -598,6 +647,10 @@ func (s *Service) LoadAttachmentDataURL(ctx context.Context, commitHash, relPath
 	if commitHash == "" || relPath == "" {
 		return "", fmt.Errorf("commit hash and path are required")
 	}
+	cacheKey := commitHash + ":" + relPath
+	if cached, ok := s.attachmentCache.Load(cacheKey); ok {
+		return cached.(string), nil
+	}
 	repoSpec := s.repoSpec()
 	if repoSpec == "" {
 		return "", fmt.Errorf("repo spec is required")
@@ -625,7 +678,9 @@ func (s *Service) LoadAttachmentDataURL(ctx context.Context, commitHash, relPath
 	if mimeType == "" {
 		mimeType = "application/octet-stream"
 	}
-	return "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(data), nil
+	dataURL := "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(data)
+	s.attachmentCache.Store(cacheKey, dataURL)
+	return dataURL, nil
 }
 
 func shortSHA(sha string) string {
@@ -663,6 +718,24 @@ func buildGitAssetURI(commitHash, path string) string {
 	return fmt.Sprintf("gitchat-attachment://%s?path=%s", strings.TrimSpace(commitHash), url.QueryEscape(path))
 }
 
+func (s *Service) commitIdentity(defaultName string) (string, string) {
+	name := strings.TrimSpace(defaultName)
+	email := ""
+	if configuredName, err := runGitOutput(context.Background(), "", "config", "--get", "user.name"); err == nil && strings.TrimSpace(configuredName) != "" {
+		name = strings.TrimSpace(configuredName)
+	}
+	if configuredEmail, err := runGitOutput(context.Background(), "", "config", "--get", "user.email"); err == nil && strings.TrimSpace(configuredEmail) != "" {
+		email = strings.TrimSpace(configuredEmail)
+	}
+	if name == "" {
+		name = "gitchat"
+	}
+	if email == "" {
+		email = fmt.Sprintf("%s@gitchat.local", strings.ToLower(strings.ReplaceAll(name, " ", ".")))
+	}
+	return name, email
+}
+
 func (s *Service) pushBranches(ctx context.Context, branches ...string) error {
 	if s.RemoteName == "" {
 		return nil
@@ -683,7 +756,7 @@ func (s *Service) pushBranches(ctx context.Context, branches ...string) error {
 
 func (s *Service) ensureMainBranch(ctx context.Context) error {
 	if s.RemoteName != "" {
-		if err := s.Repo.Fetch(ctx, s.RemoteName); err != nil && !errors.Is(err, transport.ErrEmptyRemoteRepository) && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		if err := s.fetchRemote(ctx, false); err != nil {
 			return err
 		}
 	}
