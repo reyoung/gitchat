@@ -12,6 +12,9 @@ const state = {
   },
   modal: null,
   status: null,
+  profile: {
+    avatarText: "GC",
+  },
 };
 
 const el = (tag, className, text) => {
@@ -115,6 +118,18 @@ const modalPresets = {
       showStatus("success", `User ${values.userID} created`);
     },
   },
+  editProfile: {
+    title: "Edit profile",
+    description: "Choose the avatar text shown in the sidebar and on your messages.",
+    fields: [
+      { name: "avatarText", label: "Avatar", placeholder: "YY", value: () => state.profile.avatarText || "GC" },
+    ],
+    action: async (values) => {
+      state.profile.avatarText = (values.avatarText || "GC").trim().slice(0, 2) || "GC";
+      render();
+      showStatus("success", "Profile updated");
+    },
+  },
   createChannel: {
     title: "Create channel",
     description: "Open a new channel branch on top of main.",
@@ -144,37 +159,6 @@ const modalPresets = {
       state.app = appState;
       render();
       showStatus("success", `Added ${values.member} to ${values.channelID}`);
-    },
-  },
-  createExperiment: {
-    title: "Create experiment",
-    description: "Start an experiment branch and register its config.",
-    fields: [
-      { name: "experimentID", label: "Experiment ID", placeholder: "exp-search-ranking" },
-      { name: "title", label: "Title", placeholder: "Search ranking trial" },
-      { name: "baseRef", label: "Base ref", placeholder: "HEAD", value: () => "HEAD" },
-      { name: "actor", label: "Actor", placeholder: "alice", value: () => state.app?.currentUser || "" },
-      { name: "configJSON", label: "Config JSON", placeholder: "{\"model\":\"gpt-5.4\"}", multiline: true, value: () => "{}" },
-    ],
-    action: async (values) => {
-      const appState = await call("CreateExperiment", values);
-      state.app = appState;
-      render();
-      showStatus("success", `Experiment ${values.experimentID} created`);
-    },
-  },
-  retainExperiment: {
-    title: "Retain attempt",
-    description: "Merge an attempt SHA into an experiment branch using the retain flow.",
-    fields: [
-      { name: "experimentID", label: "Experiment ID", placeholder: "exp-search-ranking", value: () => state.app?.experiments?.[0]?.id || "" },
-      { name: "ref", label: "Attempt SHA / ref", placeholder: "abc123def456" },
-    ],
-    action: async (values) => {
-      const appState = await call("RetainExperiment", values);
-      state.app = appState;
-      render();
-      showStatus("success", `Retained ${values.ref}`);
     },
   },
 };
@@ -419,17 +403,6 @@ const render = () => {
     )
     .join("");
 
-  const experiments = state.app.experiments
-    .map(
-      (experiment) => `
-        <div class="experiment-item">
-          <span class="experiment-name">${escapeHTML(experiment.id)}</span>
-          <span class="experiment-meta">${escapeHTML(experiment.title)} · ${escapeHTML(experiment.creator || "unknown")}</span>
-        </div>
-      `,
-    )
-    .join("");
-
   const selectedTitle = state.app.selectedChannelTitle || "Pick a channel";
   const selectedMeta = state.selectedChannel
     ? `Channel branch: channels/${escapeHTML(state.selectedChannel)}`
@@ -454,7 +427,7 @@ const render = () => {
   root.innerHTML = `
     <div class="shell">
       <aside class="workspace-rail">
-        <div class="workspace-badge">GC</div>
+        <button class="workspace-badge" data-open-modal="editProfile">${escapeHTML(state.profile.avatarText || "GC")}</button>
         <div class="workspace-user">
           <div>GitChat</div>
           <div>${escapeHTML(state.app.currentUser || "unconfigured user")}</div>
@@ -464,19 +437,14 @@ const render = () => {
       <aside class="sidebar">
         <div class="sidebar-header">
           <h1 class="sidebar-title">GitChat</h1>
-          <p class="sidebar-subtitle">Branches, messages, and experiments in one desktop view.</p>
+          <p class="sidebar-subtitle">Channels and threaded messages on top of git commits.</p>
         </div>
         <div class="sidebar-actions">
           <button class="primary" data-open-modal="createChannel">New channel</button>
-          <button data-open-modal="createUser">Create user</button>
         </div>
         <section class="sidebar-section">
           <div class="section-label">Channels</div>
           <div class="channel-list">${channels || '<div class="empty-state">No channels yet.</div>'}</div>
-        </section>
-        <section class="sidebar-section">
-          <div class="section-label">Experiments</div>
-          <div class="experiment-list">${experiments || '<div class="empty-state">No experiments indexed.</div>'}</div>
         </section>
       </aside>
 
@@ -489,8 +457,6 @@ const render = () => {
           <div class="toolbar">
             <button class="primary" data-refresh="true">Refresh</button>
             <button data-open-modal="addMember">Add member</button>
-            <button data-open-modal="createExperiment">New experiment</button>
-            <button data-open-modal="retainExperiment">Retain attempt</button>
           </div>
         </header>
         <section class="messages">${renderMessages()}</section>
@@ -508,44 +474,6 @@ const render = () => {
           </div>
         </section>
       </main>
-
-      <aside class="detail-panel">
-        <div class="detail-header">
-          <h2 class="detail-title">Context</h2>
-          <p class="detail-copy">Keep operational actions close to the conversation, and keep experiments visible without leaving the thread.</p>
-        </div>
-        <div class="detail-actions">
-          <button class="primary" data-open-modal="createExperiment">Create experiment</button>
-          <button data-open-modal="retainExperiment">Retain SHA</button>
-        </div>
-        <section class="detail-section">
-          <h3>Current user</h3>
-          <div class="detail-card">
-            <strong>${escapeHTML(state.app.currentUser || "No default user")}</strong>
-            <span>Messages are sent from the matching users/&lt;id&gt; branch.</span>
-          </div>
-        </section>
-        <section class="detail-section">
-          <h3>Recent experiments</h3>
-          <div class="detail-stack">
-            ${
-              state.app.experiments.length
-                ? state.app.experiments
-                    .slice(0, 4)
-                    .map(
-                      (experiment) => `
-                        <div class="detail-card">
-                          <strong>${escapeHTML(experiment.id)}</strong>
-                          <span>${escapeHTML(experiment.title)} · ${escapeHTML(experiment.creator || "unknown")}</span>
-                        </div>
-                      `,
-                    )
-                    .join("")
-                : '<div class="detail-card"><strong>No experiments</strong><span>Create one from the action bar.</span></div>'
-            }
-          </div>
-        </section>
-      </aside>
     </div>
     ${state.status ? `<div class="status ${escapeHTML(state.status.kind)}">${escapeHTML(state.status.text)}</div>` : ""}
     ${renderModal()}
