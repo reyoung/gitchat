@@ -378,7 +378,7 @@ func (s *Service) SendMessage(ctx context.Context, in SendMessageInput) error {
 	if err := s.ensureUserBranch(ctx, in.UserID); err != nil {
 		return err
 	}
-	if len(in.Follows) == 0 && strings.TrimSpace(in.EditOf) == "" {
+	if len(in.Follows) == 0 && strings.TrimSpace(in.EditOf) == "" && strings.TrimSpace(in.DeleteOf) == "" {
 		heads, err := s.ChannelHeads(ctx, in.ChannelID)
 		if err != nil {
 			return err

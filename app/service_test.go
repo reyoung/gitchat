@@ -354,6 +354,9 @@ func TestDeleteMessageAppendsCommitWithoutChangingChannelHeads(t *testing.T) {
 	for _, message := range messages {
 		if message.DeleteOf == original.CommitHash {
 			deleteFound = true
+			if len(message.Follows) != 0 {
+				t.Fatalf("expected delete commit to skip channel head follows, got %#v", message.Follows)
+			}
 		}
 	}
 	if !deleteFound {
