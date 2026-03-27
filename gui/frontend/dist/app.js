@@ -298,8 +298,9 @@ const buildSendPayload = () => ({
   channelID: state.selectedChannel,
   subject: "",
   body: state.draft.body,
-  replyTo: state.draft.replyTo,
+  replyTo: state.draft.replyTo || (!state.draft.editOf && state.selectedThread ? state.selectedThread : ""),
   editOf: state.draft.editOf,
+  deleteOf: "",
   experimentID: "",
   experimentSHA: state.draft.experimentSHA,
 });
@@ -347,6 +348,39 @@ const submitMessage = async (payload = buildSendPayload()) => {
 const retrySend = async () => {
   if (!state.send.retryPayload) return;
   await submitMessage(state.send.retryPayload);
+};
+
+const deleteMessage = async (commitHash) => {
+  if (!commitHash || state.send.inFlight) return;
+  try {
+    setSendState({
+      inFlight: true,
+      error: "",
+      retryPayload: null,
+    });
+    render();
+    const appState = await call("DeleteMessage", {
+      userID: state.app?.currentUser || "",
+      channelID: state.selectedChannel,
+      commitHash,
+    }, { timeoutMs: 0 });
+    state.app = appState;
+    state.selectedChannel = appState.selectedChannel || "";
+    setSendState({
+      inFlight: false,
+      error: "",
+      retryPayload: null,
+    });
+    render();
+    showStatus("success", "Message deleted");
+  } catch (err) {
+    setSendState({
+      inFlight: false,
+      error: err.message || String(err),
+      retryPayload: null,
+    });
+    render();
+  }
 };
 
 const modalPresets = {
@@ -490,21 +524,29 @@ const updateAvatar = async () => {
 const getVisibleMessages = (messages) => {
   const latestEditByTarget = new Map();
   const editCounts = new Map();
+  const latestDeleteByTarget = new Map();
   for (const message of messages) {
-    if (!message.editOf) continue;
-    editCounts.set(message.editOf, (editCounts.get(message.editOf) || 0) + 1);
-    latestEditByTarget.set(message.editOf, message);
+    if (message.editOf) {
+      editCounts.set(message.editOf, (editCounts.get(message.editOf) || 0) + 1);
+      latestEditByTarget.set(message.editOf, message);
+    }
+    if (message.deleteOf) {
+      latestDeleteByTarget.set(message.deleteOf, message);
+    }
   }
   return messages
-    .filter((message) => !message.editOf)
+    .filter((message) => !message.editOf && !message.deleteOf)
     .map((message) => {
       const latestEdit = latestEditByTarget.get(message.commitHash);
+      const latestDelete = latestDeleteByTarget.get(message.commitHash);
       return {
         ...message,
-        body: latestEdit ? latestEdit.body : message.body,
-        subject: latestEdit ? latestEdit.subject : message.subject,
+        body: latestDelete ? "" : latestEdit ? latestEdit.body : message.body,
+        subject: latestDelete ? "message deleted" : latestEdit ? latestEdit.subject : message.subject,
         editedAt: latestEdit ? latestEdit.createdAt : "",
         editCount: editCounts.get(message.commitHash) || 0,
+        deleted: Boolean(latestDelete),
+        deletedAt: latestDelete ? latestDelete.createdAt : "",
       };
     });
 };
@@ -532,16 +574,19 @@ const renderMessageCard = (message, options = {}) => {
   const mine = message.userID === state.app.currentUser ? " mine" : "";
   const reply = message.replyTo ? `<span class="message-thread">reply to ${escapeHTML(message.replyTo.slice(0, 10))}</span>` : "";
   const edited = message.editCount ? `<span class="message-thread">edited ${message.editCount}x${message.editedAt ? ` · last ${escapeHTML(message.editedAt)}` : ""}</span>` : "";
+  const deleted = message.deleted ? `<span class="message-thread">deleted${message.deletedAt ? ` · ${escapeHTML(message.deletedAt)}` : ""}</span>` : "";
   const tags = [];
   if (message.experimentID) {
     const sha = message.experimentSHA ? ` · ${escapeHTML(message.experimentSHA)}` : "";
     tags.push(`<span class="tag experiment">experiment ${escapeHTML(message.experimentID)}${sha}</span>`);
   }
-  const actions = [
-    `<button type="button" class="message-action" data-reply-hash="${escapeHTML(message.commitHash)}">Reply</button>`,
-  ];
-  if (message.userID === state.app.currentUser) {
+  const actions = [];
+  if (!message.deleted) {
+    actions.push(`<button type="button" class="message-action" data-reply-hash="${escapeHTML(message.commitHash)}">Reply</button>`);
+  }
+  if (message.userID === state.app.currentUser && !message.deleted) {
     actions.push(`<button type="button" class="message-action" data-edit-hash="${escapeHTML(message.commitHash)}">Edit</button>`);
+    actions.push(`<button type="button" class="message-action danger" data-delete-hash="${escapeHTML(message.commitHash)}">Delete</button>`);
   }
   if (!options.hideThreadButton) {
     actions.push(`<button type="button" class="message-action" data-open-thread="${escapeHTML(message.commitHash)}">Thread</button>`);
@@ -556,9 +601,10 @@ const renderMessageCard = (message, options = {}) => {
           <span class="message-sha">${escapeHTML(message.shortHash)}</span>
           ${reply}
           ${edited}
+          ${deleted}
         </div>
       </div>
-      <div class="message-body markdown-body">${renderMarkdown(message.body || "")}</div>
+      <div class="message-body markdown-body ${message.deleted ? "is-deleted" : ""}">${message.deleted ? '<p><em>This message was deleted.</em></p>' : renderMarkdown(message.body || "")}</div>
       ${tags.length ? `<div class="message-tags">${tags.join("")}</div>` : ""}
       <div class="message-actions">${actions.join("")}</div>
     </article>
@@ -879,6 +925,15 @@ const render = () => {
 
   root.querySelectorAll("[data-edit-hash]").forEach((button) => {
     button.addEventListener("click", () => startEdit(button.dataset.editHash || ""));
+  });
+
+  root.querySelectorAll("[data-delete-hash]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const commitHash = button.dataset.deleteHash || "";
+      if (!commitHash) return;
+      if (!window.confirm(`Delete message ${commitHash.slice(0, 10)}?`)) return;
+      await deleteMessage(commitHash);
+    });
   });
 
   root.querySelectorAll("[data-open-thread]").forEach((button) => {

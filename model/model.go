@@ -32,6 +32,7 @@ type Message struct {
 	Body          string
 	ReplyTo       string
 	EditOf        string
+	DeleteOf      string
 	Follows       []string
 	ExperimentID  string
 	ExperimentSHA string

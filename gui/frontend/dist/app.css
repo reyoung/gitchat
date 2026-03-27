@@ -428,6 +428,20 @@ button {
   color: var(--text);
 }
 
+.message-action.danger {
+  color: #ff9ab5;
+  border-color: rgba(224, 30, 90, 0.22);
+}
+
+.message-action.danger:hover {
+  background: rgba(224, 30, 90, 0.16);
+  color: #ffd7e3;
+}
+
+.message-body.is-deleted {
+  color: var(--muted);
+}
+
 .tag {
   border-radius: 999px;
   padding: 5px 10px;

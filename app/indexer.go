@@ -83,6 +83,7 @@ func (i *Indexer) indexUserBranch(ctx context.Context, sourceRef, branch string)
 			Body:          commit.Body,
 			ReplyTo:       commit.Trailers["Reply-To"],
 			EditOf:        commit.Trailers["Edit-Of"],
+			DeleteOf:      commit.Trailers["Delete-Of"],
 			Follows:       splitCSV(commit.Trailers["Follows"]),
 			ExperimentID:  commit.Trailers["Experiment"],
 			ExperimentSHA: commit.Trailers["Experiment-SHA"],

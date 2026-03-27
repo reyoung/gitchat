@@ -70,6 +70,7 @@ type MessageView struct {
 	Body          string `json:"body"`
 	ReplyTo       string `json:"replyTo"`
 	EditOf        string `json:"editOf"`
+	DeleteOf      string `json:"deleteOf"`
 	ExperimentID  string `json:"experimentID"`
 	ExperimentSHA string `json:"experimentSHA"`
 	CreatedAt     string `json:"createdAt"`
@@ -82,8 +83,15 @@ type SendMessageRequest struct {
 	Body          string `json:"body"`
 	ReplyTo       string `json:"replyTo"`
 	EditOf        string `json:"editOf"`
+	DeleteOf      string `json:"deleteOf"`
 	ExperimentID  string `json:"experimentID"`
 	ExperimentSHA string `json:"experimentSHA"`
+}
+
+type DeleteMessageRequest struct {
+	UserID     string `json:"userID"`
+	ChannelID  string `json:"channelID"`
+	CommitHash string `json:"commitHash"`
 }
 
 type CreateUserRequest struct {
@@ -173,11 +181,15 @@ func (b *Bridge) SendMessage(req SendMessageRequest) (AppState, error) {
 	}
 	subject := strings.TrimSpace(req.Subject)
 	body := strings.TrimSpace(req.Body)
-	if subject == "" && body == "" {
+	if subject == "" && body == "" && strings.TrimSpace(req.DeleteOf) == "" {
 		return AppState{}, fmt.Errorf("message body is required")
 	}
 	if subject == "" {
-		subject = firstLine(body)
+		if strings.TrimSpace(req.DeleteOf) != "" {
+			subject = "delete message"
+		} else {
+			subject = firstLine(body)
+		}
 	}
 	if err := b.svc.SendMessage(context.Background(), app.SendMessageInput{
 		UserID:        req.UserID,
@@ -186,12 +198,31 @@ func (b *Bridge) SendMessage(req SendMessageRequest) (AppState, error) {
 		Body:          body,
 		ReplyTo:       strings.TrimSpace(req.ReplyTo),
 		EditOf:        strings.TrimSpace(req.EditOf),
+		DeleteOf:      strings.TrimSpace(req.DeleteOf),
 		ExperimentID:  strings.TrimSpace(req.ExperimentID),
 		ExperimentSHA: strings.TrimSpace(req.ExperimentSHA),
 	}); err != nil {
 		return AppState{}, err
 	}
 	return b.loadState(req.ChannelID)
+}
+
+func (b *Bridge) DeleteMessage(req DeleteMessageRequest) (AppState, error) {
+	userID := firstNonEmpty(req.UserID, b.defaults.UserName)
+	channelID := strings.TrimSpace(req.ChannelID)
+	commitHash := strings.TrimSpace(req.CommitHash)
+	if userID == "" || channelID == "" || commitHash == "" {
+		return AppState{}, fmt.Errorf("user, channel, and commit hash are required")
+	}
+	if err := b.svc.SendMessage(context.Background(), app.SendMessageInput{
+		UserID:    userID,
+		ChannelID: channelID,
+		Subject:   "delete message",
+		DeleteOf:  commitHash,
+	}); err != nil {
+		return AppState{}, err
+	}
+	return b.loadState(channelID)
 }
 
 func (b *Bridge) CreateUser(req CreateUserRequest) (AppState, error) {
@@ -434,6 +465,7 @@ func (b *Bridge) loadState(selectedChannel string) (AppState, error) {
 			Body:          message.Body,
 			ReplyTo:       message.ReplyTo,
 			EditOf:        message.EditOf,
+			DeleteOf:      message.DeleteOf,
 			ExperimentID:  message.ExperimentID,
 			ExperimentSHA: shortSHA(message.ExperimentSHA),
 			CreatedAt:     formatTimestamp(message.CreatedAt),

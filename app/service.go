@@ -316,6 +316,7 @@ type SendMessageInput struct {
 	Body          string
 	ReplyTo       string
 	EditOf        string
+	DeleteOf      string
 	Follows       []string
 	ExperimentID  string
 	ExperimentSHA string
@@ -365,6 +366,7 @@ func (s *Service) SendMessage(ctx context.Context, in SendMessageInput) error {
 				"Follows":        strings.Join(in.Follows, ","),
 				"Reply-To":       in.ReplyTo,
 				"Edit-Of":        in.EditOf,
+				"Delete-Of":      in.DeleteOf,
 				"Experiment":     in.ExperimentID,
 				"Experiment-SHA": in.ExperimentSHA,
 				"Created-At":     s.Now().UTC().Format(time.RFC3339),
@@ -399,7 +401,7 @@ func (s *Service) ChannelHeads(ctx context.Context, channelID string) ([]string,
 	}
 	referenced := map[string]bool{}
 	for _, message := range messages {
-		if strings.TrimSpace(message.EditOf) != "" {
+		if strings.TrimSpace(message.EditOf) != "" || strings.TrimSpace(message.DeleteOf) != "" {
 			continue
 		}
 		for _, followed := range message.Follows {
@@ -408,7 +410,7 @@ func (s *Service) ChannelHeads(ctx context.Context, channelID string) ([]string,
 	}
 	heads := make([]string, 0)
 	for _, message := range messages {
-		if strings.TrimSpace(message.EditOf) != "" {
+		if strings.TrimSpace(message.EditOf) != "" || strings.TrimSpace(message.DeleteOf) != "" {
 			continue
 		}
 		if !referenced[message.CommitHash] {
