@@ -355,6 +355,52 @@ func (r *Repo) CreateOrphanCommit(ctx context.Context, message string, files map
 	return newHash.String(), ctx.Err()
 }
 
+func (r *Repo) CommitFilesToBranch(ctx context.Context, branch, message string, files map[string][]byte) (string, error) {
+	repo, err := r.open()
+	if err != nil {
+		return "", err
+	}
+	refName := plumbing.NewBranchReferenceName(branch)
+	ref, err := repo.Reference(refName, false)
+	var parentCommit *object.Commit
+	var baseTree plumbing.Hash
+	if err == nil {
+		parentCommit, err = repo.CommitObject(ref.Hash())
+		if err != nil {
+			return "", err
+		}
+		baseTree = parentCommit.TreeHash
+	} else if !errors.Is(err, plumbing.ErrReferenceNotFound) {
+		return "", err
+	}
+	treeHash, err := writeTreeWithFiles(repo, baseTree, files)
+	if err != nil {
+		return "", err
+	}
+	sig := defaultSignature(repo)
+	commit := &object.Commit{
+		Author:    *sig,
+		Committer: *sig,
+		Message:   message,
+		TreeHash:  treeHash,
+	}
+	if parentCommit != nil {
+		commit.ParentHashes = []plumbing.Hash{parentCommit.Hash}
+	}
+	obj := repo.Storer.NewEncodedObject()
+	if err := commit.Encode(obj); err != nil {
+		return "", err
+	}
+	newHash, err := repo.Storer.SetEncodedObject(obj)
+	if err != nil {
+		return "", err
+	}
+	if err := repo.Storer.SetReference(plumbing.NewHashReference(refName, newHash)); err != nil {
+		return "", err
+	}
+	return newHash.String(), ctx.Err()
+}
+
 func (r *Repo) AnchorCommitToBranch(ctx context.Context, branch, commitHash, message string) error {
 	repo, err := r.open()
 	if err != nil {

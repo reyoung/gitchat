@@ -63,18 +63,17 @@ func (s *Service) CreateUser(ctx context.Context, userID, keyPath string) error 
 		if err != nil {
 			return err
 		}
-		if err := s.Repo.WriteFile(filepath.ToSlash(filepath.Join("users", userID+".json")), append(payload, '\n')); err != nil {
-			return err
+		files := map[string][]byte{
+			filepath.ToSlash(filepath.Join("users", userID+".json")): append(payload, '\n'),
 		}
 		if keyPath != "" {
-			if err := s.Repo.CopyFile(keyPath, filepath.ToSlash(filepath.Join("keys", userID+".pub"))); err != nil {
+			keyData, err := os.ReadFile(keyPath)
+			if err != nil {
 				return err
 			}
+			files[filepath.ToSlash(filepath.Join("keys", userID+".pub"))] = keyData
 		}
-		if err := s.Repo.AddAll(ctx); err != nil {
-			return err
-		}
-		if err := s.Repo.Commit(ctx, gitrepo.BuildCommitMessage("register user "+userID, "", nil), false); err != nil {
+		if _, err := s.Repo.CommitFilesToBranch(ctx, "main", gitrepo.BuildCommitMessage("register user "+userID, "", nil), files); err != nil {
 			return err
 		}
 		mainHead, err := s.Repo.RevParse(ctx, "main")
@@ -110,13 +109,9 @@ func (s *Service) CreateChannel(ctx context.Context, channelID, creator, title s
 		if err != nil {
 			return err
 		}
-		if err := s.Repo.WriteFile(filepath.ToSlash(filepath.Join("channels", channelID+".json")), append(payload, '\n')); err != nil {
-			return err
-		}
-		if err := s.Repo.AddAll(ctx); err != nil {
-			return err
-		}
-		if err := s.Repo.Commit(ctx, gitrepo.BuildCommitMessage("create channel "+channelID, "", nil), false); err != nil {
+		if _, err := s.Repo.CommitFilesToBranch(ctx, "main", gitrepo.BuildCommitMessage("create channel "+channelID, "", nil), map[string][]byte{
+			filepath.ToSlash(filepath.Join("channels", channelID+".json")): append(payload, '\n'),
+		}); err != nil {
 			return err
 		}
 		mainHead, err := s.Repo.RevParse(ctx, "main")

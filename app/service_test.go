@@ -230,6 +230,67 @@ func TestSendMessageAutoCreatesMissingUser(t *testing.T) {
 	}
 }
 
+func TestCreateUserAndChannelWorkAgainstRemoteRepo(t *testing.T) {
+	ctx := context.Background()
+	repoSpec := testutil.NewRemoteRepo(t)
+	dbPath := filepath.Join(t.TempDir(), "cache.db")
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	svc := NewService(gitrepo.NewRemote(repoSpec), st)
+	svc.RemoteName = "origin"
+	svc.Now = func() time.Time { return time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC) }
+
+	if err := svc.Init(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.CreateUser(ctx, "alice", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.CreateChannel(ctx, "research", "alice", "Research"); err != nil {
+		t.Fatal(err)
+	}
+
+	users, err := st.ListUsers(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(users) != 1 || users[0].ID != "alice" || users[0].Branch != "users/alice" {
+		t.Fatalf("unexpected users: %#v", users)
+	}
+
+	channels, err := st.ListChannels(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(channels) != 1 || channels[0].ID != "research" || channels[0].Branch != "channels/research" {
+		t.Fatalf("unexpected channels: %#v", channels)
+	}
+
+	remoteRepo := gitrepo.NewRemote(repoSpec)
+	if err := remoteRepo.Fetch(ctx, "origin"); err != nil {
+		t.Fatal(err)
+	}
+	mainSHA, err := remoteRepo.RevParse(ctx, "origin/main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	userSHA, err := remoteRepo.RevParse(ctx, "origin/users/alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	channelSHA, err := remoteRepo.RevParse(ctx, "origin/channels/research")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mainSHA == "" || userSHA == "" || channelSHA == "" {
+		t.Fatalf("expected remote refs to exist: main=%q user=%q channel=%q", mainSHA, userSHA, channelSHA)
+	}
+}
+
 type modelMessageView struct {
 	idx int
 }
