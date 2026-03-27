@@ -24,7 +24,7 @@
 html,
 body {
   margin: 0;
-  min-height: 100%;
+  height: 100%;
   background:
     radial-gradient(circle at top left, rgba(124, 40, 93, 0.32), transparent 24%),
     radial-gradient(circle at bottom right, rgba(46, 182, 125, 0.12), transparent 18%),
@@ -34,6 +34,7 @@ body {
 
 body {
   min-height: 100vh;
+  overflow: hidden;
 }
 
 button,
@@ -49,7 +50,8 @@ button {
 .shell {
   display: grid;
   grid-template-columns: 84px 320px minmax(520px, 1fr);
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .workspace-rail {
@@ -109,6 +111,8 @@ button {
   border-right: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .sidebar-header,
@@ -154,6 +158,7 @@ button {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  overflow: auto;
 }
 
 .channel-item {
@@ -189,6 +194,8 @@ button {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 20%), var(--bg);
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .panel-header {
@@ -254,6 +261,7 @@ button {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  min-height: 0;
 }
 
 .thread-page {
@@ -438,6 +446,10 @@ button {
   border-top: 1px solid var(--line);
   padding: 18px 22px 22px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.08));
+  position: sticky;
+  bottom: 0;
+  z-index: 12;
+  flex-shrink: 0;
 }
 
 .composer-card {
@@ -513,6 +525,7 @@ button {
 .field textarea {
   min-height: 160px;
   resize: vertical;
+  max-height: 55vh;
 }
 
 .field input:focus,

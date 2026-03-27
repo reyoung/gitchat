@@ -7,6 +7,7 @@ const state = {
   attachmentCache: new Map(),
   previewOpen: false,
   autoRefreshTimer: null,
+  composerHeight: Number(window.localStorage.getItem("gitchat:composerHeight") || 240),
   draft: {
     body: "",
     replyTo: "",
@@ -689,7 +690,7 @@ const render = () => {
             </div>
             <div class="${composerClass}">
               <div class="field composer-editor">
-                <textarea id="body" placeholder="Write a message. Use Cmd+Enter to send. Markdown and images are supported.">${escapeHTML(state.draft.body)}</textarea>
+                <textarea id="body" style="height:${Math.max(160, state.composerHeight)}px" placeholder="Write a message. Use Cmd+Enter to send. Markdown and images are supported.">${escapeHTML(state.draft.body)}</textarea>
               </div>
               <div class="composer-preview ${state.previewOpen ? "is-open" : ""}">
                 <div class="field-label">Preview</div>
@@ -748,6 +749,13 @@ const render = () => {
     state.draft.body = event.target.value;
     syncComposerPreview(root);
   });
+  if (bodyInput && window.ResizeObserver) {
+    const observer = new ResizeObserver(() => {
+      state.composerHeight = Math.max(160, Math.round(bodyInput.getBoundingClientRect().height));
+      window.localStorage.setItem("gitchat:composerHeight", String(state.composerHeight));
+    });
+    observer.observe(bodyInput);
+  }
   if (bodyInput) bodyInput.addEventListener("keydown", async (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
