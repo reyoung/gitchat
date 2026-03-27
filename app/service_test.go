@@ -358,6 +358,19 @@ func TestCreateUserAndChannelWorkAgainstRemoteRepo(t *testing.T) {
 	if mainSHA == "" || userSHA == "" || channelSHA == "" {
 		t.Fatalf("expected remote refs to exist: main=%q user=%q channel=%q", mainSHA, userSHA, channelSHA)
 	}
+	channelCommits, err := remoteRepo.ListCommits(ctx, "origin/channels/research")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(channelCommits) != 1 {
+		t.Fatalf("expected 1 channel commit, got %#v", channelCommits)
+	}
+	if channelCommits[0].Hash != channelSHA {
+		t.Fatalf("expected channel head %s to match only commit %#v", channelSHA, channelCommits)
+	}
+	if strings.TrimSpace(channelCommits[0].ParentLine) != "" {
+		t.Fatalf("expected channel create commit to be orphan, got parents %q", channelCommits[0].ParentLine)
+	}
 }
 
 func TestSyncAllowsEmptyRemoteRepository(t *testing.T) {

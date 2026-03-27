@@ -149,33 +149,9 @@ func (s *Service) CreateChannel(ctx context.Context, channelID, creator, title s
 		visibility = "public"
 	}
 	return s.Repo.WithSavedBranch(ctx, func() error {
-		if err := s.ensureMainBranch(ctx); err != nil {
-			return err
-		}
-		payload, err := json.MarshalIndent(map[string]any{
-			"id":         channelID,
-			"creator":    creator,
-			"title":      title,
-			"visibility": visibility,
-			"created_at": s.Now().UTC().Format(time.RFC3339),
-		}, "", "  ")
-		if err != nil {
-			return err
-		}
-		if _, err := s.Repo.CommitFilesToBranch(ctx, "main", gitrepo.BuildCommitMessage("create channel "+channelID, "", nil), map[string][]byte{
-			filepath.ToSlash(filepath.Join("channels", channelID+".json")): append(payload, '\n'),
-		}); err != nil {
-			return err
-		}
-		mainHead, err := s.Repo.RevParse(ctx, "main")
-		if err != nil {
-			return err
-		}
-		if err := s.Repo.EnsureBranch(ctx, "channels/"+channelID, mainHead); err != nil {
-			return err
-		}
-		if err := s.Repo.SwitchBranch(ctx, "channels/"+channelID); err != nil {
-			return err
+		branch := "channels/" + channelID
+		if s.Repo.BranchExists(ctx, branch) {
+			return fmt.Errorf("channel branch already exists: %s", channelID)
 		}
 		msg := gitrepo.BuildCommitMessage(
 			"create channel "+channelID,
@@ -190,10 +166,10 @@ func (s *Service) CreateChannel(ctx context.Context, channelID, creator, title s
 				"Member":             creator,
 			},
 		)
-		if err := s.Repo.Commit(ctx, msg, true); err != nil {
+		if _, err := s.Repo.CommitFilesToBranch(ctx, branch, msg, nil); err != nil {
 			return err
 		}
-		if err := s.pushBranches(ctx, "main", "channels/"+channelID); err != nil {
+		if err := s.pushBranches(ctx, branch); err != nil {
 			return err
 		}
 		return s.Sync(ctx)
