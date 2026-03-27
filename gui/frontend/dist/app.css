@@ -24,7 +24,7 @@
 html,
 body {
   margin: 0;
-  height: 100%;
+  min-height: 100dvh;
   background:
     radial-gradient(circle at top left, rgba(124, 40, 93, 0.32), transparent 24%),
     radial-gradient(circle at bottom right, rgba(46, 182, 125, 0.12), transparent 18%),
@@ -33,7 +33,7 @@ body {
 }
 
 body {
-  min-height: 100vh;
+  min-height: 100dvh;
   overflow: hidden;
 }
 
@@ -50,7 +50,7 @@ button {
 .shell {
   display: grid;
   grid-template-columns: 84px 320px minmax(520px, 1fr);
-  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -443,13 +443,30 @@ button {
 }
 
 .composer {
-  border-top: 1px solid var(--line);
-  padding: 18px 22px 22px;
+  padding: 0 22px 22px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.08));
   position: sticky;
   bottom: 0;
   z-index: 12;
   flex-shrink: 0;
+}
+
+.composer-resizer {
+  height: 12px;
+  margin: 0 -22px 6px;
+  cursor: row-resize;
+  position: relative;
+}
+
+.composer-resizer::before {
+  content: "";
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  top: 5px;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .composer-card {
@@ -524,7 +541,7 @@ button {
 
 .field textarea {
   min-height: 160px;
-  resize: vertical;
+  resize: none;
   max-height: 55vh;
 }
 

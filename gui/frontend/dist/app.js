@@ -7,7 +7,8 @@ const state = {
   attachmentCache: new Map(),
   previewOpen: false,
   autoRefreshTimer: null,
-  composerHeight: Number(window.localStorage.getItem("gitchat:composerHeight") || 240),
+  composerHeight: 160,
+  messageScrollBottomOffset: 0,
   draft: {
     body: "",
     replyTo: "",
@@ -16,6 +17,11 @@ const state = {
   },
   modal: null,
   status: null,
+};
+
+const previousStateForScroll = {
+  restoreAttempted: false,
+  channelID: "",
 };
 
 const el = (tag, className, text) => {
@@ -246,6 +252,10 @@ const waitForBridge = async () => {
 
 const refreshState = async (selectedChannel = state.selectedChannel) => {
   const previousState = state.app;
+  const messagesEl = document.querySelector(".messages");
+  if (messagesEl) {
+    state.messageScrollBottomOffset = Math.max(0, messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight);
+  }
   const appState = await call("GetState", selectedChannel || "");
   state.app = appState;
   state.selectedChannel = appState.selectedChannel || "";
@@ -684,6 +694,7 @@ const render = () => {
         </header>
         <section class="messages">${renderMessages()}</section>
         <section class="composer">
+          <div class="composer-resizer" data-composer-resizer="true" title="Drag to resize editor"></div>
           <div class="composer-card">
             ${replyBanner}
             <div class="composer-toolbar">
@@ -749,13 +760,6 @@ const render = () => {
     state.draft.body = event.target.value;
     syncComposerPreview(root);
   });
-  if (bodyInput && window.ResizeObserver) {
-    const observer = new ResizeObserver(() => {
-      state.composerHeight = Math.max(160, Math.round(bodyInput.getBoundingClientRect().height));
-      window.localStorage.setItem("gitchat:composerHeight", String(state.composerHeight));
-    });
-    observer.observe(bodyInput);
-  }
   if (bodyInput) bodyInput.addEventListener("keydown", async (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
@@ -832,8 +836,44 @@ const render = () => {
     button.addEventListener("click", clearComposerMode);
   });
 
+  root.querySelectorAll("[data-composer-resizer]").forEach((handle) => {
+    handle.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      const startY = event.clientY;
+      const startHeight = state.composerHeight;
+      const onMove = (moveEvent) => {
+        const delta = startY - moveEvent.clientY;
+        state.composerHeight = Math.max(160, Math.min(window.innerHeight * 0.55, Math.round(startHeight + delta)));
+        const editor = document.querySelector("#body");
+        if (editor) {
+          editor.style.height = `${state.composerHeight}px`;
+        }
+      };
+      const onUp = () => {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    });
+  });
+
   hydrateRenderedMarkdown(root);
   syncComposerPreview(root);
+  const nextMessagesEl = root.querySelector(".messages");
+  if (nextMessagesEl) {
+    const wasAtBottom = state.messageScrollBottomOffset <= 48;
+    const channelChanged = previousStateForScroll.channelID !== state.selectedChannel;
+    if (!previousStateForScroll.restoreAttempted || channelChanged) {
+      nextMessagesEl.scrollTop = nextMessagesEl.scrollHeight;
+    } else if (wasAtBottom) {
+      nextMessagesEl.scrollTop = nextMessagesEl.scrollHeight;
+    } else {
+      nextMessagesEl.scrollTop = Math.max(0, nextMessagesEl.scrollHeight - nextMessagesEl.clientHeight - state.messageScrollBottomOffset);
+    }
+    previousStateForScroll.restoreAttempted = true;
+    previousStateForScroll.channelID = state.selectedChannel;
+  }
 };
 
 const bootstrap = async () => {
