@@ -133,15 +133,19 @@ const showStatus = (kind, text) => {
   }, 3200);
 };
 
-const call = async (method, payload) => {
+const call = async (method, payload, options = {}) => {
   const bridge = api();
   if (!bridge || typeof bridge[method] !== "function") {
     throw new Error("Wails bridge is not available yet");
   }
+  const timeoutMs = options.timeoutMs ?? 5000;
+  if (timeoutMs <= 0) {
+    return bridge[method](payload);
+  }
   return Promise.race([
     bridge[method](payload),
     new Promise((_, reject) => {
-      window.setTimeout(() => reject(new Error(`Timed out calling ${method}`)), 5000);
+      window.setTimeout(() => reject(new Error(`Timed out calling ${method}`)), timeoutMs);
     }),
   ]);
 };
@@ -368,7 +372,7 @@ const closeThread = () => {
 
 const updateAvatar = async () => {
   try {
-    const appState = await call("UpdateAvatar", { userID: state.app?.currentUser || "" });
+    const appState = await call("UpdateAvatar", { userID: state.app?.currentUser || "" }, { timeoutMs: 0 });
     state.app = appState;
     render();
     showStatus("success", "Avatar updated");
@@ -711,7 +715,7 @@ const render = () => {
         const markdown = await call("InsertImage", {
           userID: state.app?.currentUser || "",
           channelID: state.selectedChannel,
-        });
+        }, { timeoutMs: 0 });
         if (!markdown) return;
         appendMarkdownToDraft(markdown);
         const composer = root.querySelector("#body");
