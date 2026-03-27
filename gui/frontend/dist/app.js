@@ -20,6 +20,8 @@ const state = {
   send: {
     inFlight: false,
     error: "",
+    operation: "",
+    retryAction: "",
     retryPayload: null,
   },
 };
@@ -318,6 +320,8 @@ const submitMessage = async (payload = buildSendPayload()) => {
     setSendState({
       inFlight: true,
       error: "",
+      operation: "send",
+      retryAction: "send",
       retryPayload: payload,
     });
     render();
@@ -331,6 +335,8 @@ const submitMessage = async (payload = buildSendPayload()) => {
     setSendState({
       inFlight: false,
       error: "",
+      operation: "",
+      retryAction: "",
       retryPayload: null,
     });
     render();
@@ -339,6 +345,8 @@ const submitMessage = async (payload = buildSendPayload()) => {
     setSendState({
       inFlight: false,
       error: err.message || String(err),
+      operation: "",
+      retryAction: "send",
       retryPayload: payload,
     });
     render();
@@ -346,6 +354,10 @@ const submitMessage = async (payload = buildSendPayload()) => {
 };
 
 const retrySend = async () => {
+  if (state.send.retryAction === "delete") {
+    await deleteMessage(state.send.retryPayload);
+    return;
+  }
   if (!state.send.retryPayload) return;
   await submitMessage(state.send.retryPayload);
 };
@@ -356,7 +368,9 @@ const deleteMessage = async (commitHash) => {
     setSendState({
       inFlight: true,
       error: "",
-      retryPayload: null,
+      operation: "delete",
+      retryAction: "delete",
+      retryPayload: commitHash,
     });
     render();
     const appState = await call("DeleteMessage", {
@@ -369,6 +383,8 @@ const deleteMessage = async (commitHash) => {
     setSendState({
       inFlight: false,
       error: "",
+      operation: "",
+      retryAction: "",
       retryPayload: null,
     });
     render();
@@ -377,7 +393,9 @@ const deleteMessage = async (commitHash) => {
     setSendState({
       inFlight: false,
       error: err.message || String(err),
-      retryPayload: null,
+      operation: "",
+      retryAction: "delete",
+      retryPayload: commitHash,
     });
     render();
   }
@@ -742,14 +760,14 @@ const render = () => {
     ? `
       <div class="send-status send-status-progress">
         <div class="send-progress-track"><div class="send-progress-bar"></div></div>
-        <div class="send-status-text">Sending to #${escapeHTML(state.selectedChannel || "channel")}…</div>
+        <div class="send-status-text">${state.send.operation === "delete" ? "Deleting message…" : `Sending to #${escapeHTML(state.selectedChannel || "channel")}…`}</div>
       </div>
     `
     : state.send.error
     ? `
       <div class="send-status send-status-error">
         <div class="send-status-text">${escapeHTML(state.send.error)}</div>
-        <button type="button" data-retry-send="true">Retry</button>
+        <button type="button" data-retry-send="true">Retry ${state.send.retryAction === "delete" ? "delete" : "send"}</button>
       </div>
     `
     : "";
@@ -812,7 +830,7 @@ const render = () => {
                 <div class="hint">Markdown supported. Paste images. Cmd+Enter to send. Replies, edits, and attachment uploads are appended as new commits.</div>
                 ${sendInlineStatus}
               </div>
-              <button class="primary" data-send="true" ${state.send.inFlight ? "disabled" : ""}>${state.send.inFlight ? "Sending…" : sendLabel}</button>
+              <button class="primary" data-send="true" ${state.send.inFlight ? "disabled" : ""}>${state.send.inFlight ? (state.send.operation === "delete" ? "Deleting…" : "Sending…") : sendLabel}</button>
             </div>
           </div>
         </section>
