@@ -9,15 +9,24 @@ import (
 )
 
 type fakeService struct {
-	sendInput    app.SendMessageInput
-	sendCalled   bool
-	channels     []model.Channel
-	experiments  []model.Experiment
-	messages     []model.Message
-	defaultError error
+	sendInput      app.SendMessageInput
+	sendCalled     bool
+	syncCalls      int
+	forceSyncCalls int
+	channels       []model.Channel
+	experiments    []model.Experiment
+	messages       []model.Message
+	defaultError   error
 }
 
-func (f *fakeService) Sync(context.Context) error { return f.defaultError }
+func (f *fakeService) Sync(context.Context) error {
+	f.syncCalls++
+	return f.defaultError
+}
+func (f *fakeService) ForceSync(context.Context) error {
+	f.forceSyncCalls++
+	return f.defaultError
+}
 func (f *fakeService) CreateUser(context.Context, string, string) error {
 	return f.defaultError
 }
@@ -91,6 +100,34 @@ func TestGetStateSelectsFirstChannelByDefault(t *testing.T) {
 	}
 	if len(state.Messages) != 1 || state.Messages[0].ShortHash != "abcdef1234" {
 		t.Fatalf("unexpected messages: %+v", state.Messages)
+	}
+	if svc.forceSyncCalls != 1 {
+		t.Fatalf("expected first GetState to force sync once, got %d", svc.forceSyncCalls)
+	}
+	if svc.syncCalls != 0 {
+		t.Fatalf("expected first GetState not to use regular sync, got %d", svc.syncCalls)
+	}
+}
+
+func TestGetStateUsesRegularSyncAfterInitialLoad(t *testing.T) {
+	svc := &fakeService{
+		channels: []model.Channel{
+			{ID: "research", Title: "Research", Creator: "alice", IsPublic: true},
+		},
+	}
+	bridge := NewBridge(svc, Defaults{UserName: "alice"})
+
+	if _, err := bridge.GetState(""); err != nil {
+		t.Fatalf("first GetState returned error: %v", err)
+	}
+	if _, err := bridge.GetState("research"); err != nil {
+		t.Fatalf("second GetState returned error: %v", err)
+	}
+	if svc.forceSyncCalls != 1 {
+		t.Fatalf("expected one force sync, got %d", svc.forceSyncCalls)
+	}
+	if svc.syncCalls != 1 {
+		t.Fatalf("expected one regular sync after initial load, got %d", svc.syncCalls)
 	}
 }
 

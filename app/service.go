@@ -54,7 +54,7 @@ func (s *Service) Sync(ctx context.Context) error {
 	return s.syncState(ctx, true, false)
 }
 
-func (s *Service) forceSync(ctx context.Context) error {
+func (s *Service) ForceSync(ctx context.Context) error {
 	return s.syncState(ctx, true, true)
 }
 
@@ -507,7 +507,7 @@ func (s *Service) UploadImageAttachment(ctx context.Context, userID, channelID, 
 		return UploadedAttachment{}, err
 	}
 	uploaded.Markdown = fmt.Sprintf("![%s](%s)", filepath.Base(destPath), buildGitAssetURI(uploaded.CommitHash, uploaded.Path))
-	if err := s.forceSync(ctx); err != nil {
+	if err := s.ForceSync(ctx); err != nil {
 		return UploadedAttachment{}, err
 	}
 	return uploaded, nil
@@ -575,7 +575,7 @@ func (s *Service) SetUserAvatarFromFile(ctx context.Context, userID, sourcePath 
 	if err != nil {
 		return "", err
 	}
-	if err := s.forceSync(ctx); err != nil {
+	if err := s.ForceSync(ctx); err != nil {
 		return "", err
 	}
 	avatarURL := buildGitAssetURI(uploaded.CommitHash, uploaded.Path)

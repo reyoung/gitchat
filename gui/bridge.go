@@ -14,6 +14,7 @@ import (
 
 type serviceAPI interface {
 	Sync(context.Context) error
+	ForceSync(context.Context) error
 	CreateUser(context.Context, string, string) error
 	UpdateUserProfile(context.Context, string, string) error
 	SetUserAvatarFromFile(context.Context, string, string) (string, error)
@@ -32,9 +33,10 @@ type serviceAPI interface {
 }
 
 type Bridge struct {
-	ctx      context.Context
-	svc      serviceAPI
-	defaults Defaults
+	ctx             context.Context
+	svc             serviceAPI
+	defaults        Defaults
+	initialSyncDone bool
 }
 
 type AppState struct {
@@ -166,8 +168,15 @@ func (b *Bridge) startup(ctx context.Context) {
 }
 
 func (b *Bridge) GetState(selectedChannel string) (AppState, error) {
-	if err := b.svc.Sync(context.Background()); err != nil {
-		return AppState{}, err
+	if !b.initialSyncDone {
+		if err := b.svc.ForceSync(context.Background()); err != nil {
+			return AppState{}, err
+		}
+		b.initialSyncDone = true
+	} else {
+		if err := b.svc.Sync(context.Background()); err != nil {
+			return AppState{}, err
+		}
 	}
 	return b.loadState(selectedChannel)
 }
