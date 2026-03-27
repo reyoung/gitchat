@@ -804,7 +804,6 @@ const render = () => {
           </div>
           <div class="toolbar">
             <button class="primary" data-refresh="true">Refresh</button>
-            <button data-toggle-fullscreen="true">Full screen</button>
             ${state.app.selectedChannelIsPublic ? "" : '<button data-open-modal="addMember">Add member</button>'}
           </div>
         </header>
@@ -906,16 +905,6 @@ const render = () => {
       try {
         await refreshState(state.selectedChannel);
         showStatus("success", "State refreshed");
-      } catch (err) {
-        showStatus("error", err.message || String(err));
-      }
-    });
-  });
-
-  root.querySelectorAll("[data-toggle-fullscreen]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      try {
-        await call("ToggleFullscreen", undefined, { timeoutMs: 0 });
       } catch (err) {
         showStatus("error", err.message || String(err));
       }
