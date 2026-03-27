@@ -43,7 +43,24 @@ const call = async (method, payload) => {
   if (!bridge || typeof bridge[method] !== "function") {
     throw new Error("Wails bridge is not available yet");
   }
-  return bridge[method](payload);
+  return Promise.race([
+    bridge[method](payload),
+    new Promise((_, reject) => {
+      window.setTimeout(() => reject(new Error(`Timed out calling ${method}`)), 5000);
+    }),
+  ]);
+};
+
+const waitForBridge = async () => {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 5000) {
+    const bridge = api();
+    if (bridge && typeof bridge.GetState === "function") {
+      return;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 50));
+  }
+  throw new Error("Wails bridge did not become ready");
 };
 
 const refreshState = async (selectedChannel = state.selectedChannel) => {
@@ -466,6 +483,7 @@ const render = () => {
 const bootstrap = async () => {
   render();
   try {
+    await waitForBridge();
     await refreshState("");
   } catch (err) {
     showStatus("error", err.message || String(err));
