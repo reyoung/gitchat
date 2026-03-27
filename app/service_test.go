@@ -415,10 +415,6 @@ func TestCreateUserAndChannelWorkAgainstRemoteRepo(t *testing.T) {
 	if err := remoteRepo.Fetch(ctx, "origin"); err != nil {
 		t.Fatal(err)
 	}
-	mainSHA, err := remoteRepo.RevParse(ctx, "origin/main")
-	if err != nil {
-		t.Fatal(err)
-	}
 	userSHA, err := remoteRepo.RevParse(ctx, "origin/users/alice")
 	if err != nil {
 		t.Fatal(err)
@@ -427,8 +423,21 @@ func TestCreateUserAndChannelWorkAgainstRemoteRepo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mainSHA == "" || userSHA == "" || channelSHA == "" {
-		t.Fatalf("expected remote refs to exist: main=%q user=%q channel=%q", mainSHA, userSHA, channelSHA)
+	if userSHA == "" || channelSHA == "" {
+		t.Fatalf("expected remote refs to exist: user=%q channel=%q", userSHA, channelSHA)
+	}
+	userCommits, err := remoteRepo.ListCommits(ctx, "origin/users/alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(userCommits) != 1 {
+		t.Fatalf("expected 1 user commit, got %#v", userCommits)
+	}
+	if userCommits[0].Hash != userSHA {
+		t.Fatalf("expected user head %s to match only commit %#v", userSHA, userCommits)
+	}
+	if strings.TrimSpace(userCommits[0].ParentLine) != "" {
+		t.Fatalf("expected user create commit to be orphan, got parents %q", userCommits[0].ParentLine)
 	}
 	channelCommits, err := remoteRepo.ListCommits(ctx, "origin/channels/research")
 	if err != nil {

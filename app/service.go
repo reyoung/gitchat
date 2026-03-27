@@ -106,8 +106,9 @@ func (s *Service) CreateUserProfile(ctx context.Context, userID, keyPath, avatar
 		return fmt.Errorf("user id is required")
 	}
 	return s.Repo.WithSavedBranch(ctx, func() error {
-		if err := s.ensureMainBranch(ctx); err != nil {
-			return err
+		branch := "users/" + userID
+		if s.Repo.BranchExists(ctx, branch) || s.Repo.RefExists(ctx, "refs/remotes/origin/"+branch) {
+			return fmt.Errorf("user branch already exists: %s", userID)
 		}
 		payload, err := json.MarshalIndent(map[string]any{
 			"id":         userID,
@@ -127,23 +128,16 @@ func (s *Service) CreateUserProfile(ctx context.Context, userID, keyPath, avatar
 			}
 			files[filepath.ToSlash(filepath.Join("keys", userID+".pub"))] = keyData
 		}
-		if _, err := s.Repo.CommitFilesToBranch(ctx, "main", gitrepo.BuildCommitMessage("register user "+userID, "", map[string]string{
+		if _, err := s.Repo.CommitFilesToBranch(ctx, branch, gitrepo.BuildCommitMessage("register user "+userID, "", map[string]string{
 			"User-Id":         userID,
 			"User-Avatar-URL": strings.TrimSpace(avatarURL),
 		}), files); err != nil {
 			return err
 		}
-		mainHead, err := s.Repo.RevParse(ctx, "main")
-		if err != nil {
+		if err := s.pushBranches(ctx, branch); err != nil {
 			return err
 		}
-		if err := s.Repo.EnsureBranch(ctx, "users/"+userID, mainHead); err != nil {
-			return err
-		}
-		if err := s.pushBranches(ctx, "main", "users/"+userID); err != nil {
-			return err
-		}
-		return s.refreshRefs(ctx, "main", "users/"+userID)
+		return s.refreshRefs(ctx, branch)
 	})
 }
 
