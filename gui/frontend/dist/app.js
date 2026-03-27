@@ -5,6 +5,7 @@ const state = {
   selectedChannel: "",
   selectedThread: "",
   attachmentCache: new Map(),
+  previewOpen: false,
   draft: {
     body: "",
     replyTo: "",
@@ -600,7 +601,8 @@ const render = () => {
     `
     : "";
   const sendLabel = state.draft.editOf ? "Save edit" : "Send message";
-  const canInsertImage = Boolean(state.selectedChannel);
+  const previewToggleLabel = state.previewOpen ? "Hide preview" : "Show preview";
+  const composerClass = state.previewOpen ? "composer-split preview-open" : "composer-split";
 
   root.innerHTML = `
     <div class="shell">
@@ -642,16 +644,18 @@ const render = () => {
           <div class="composer-card">
             ${replyBanner}
             <div class="composer-toolbar">
-              <button type="button" data-insert-image="true" ${canInsertImage ? "" : "disabled"}>Insert image</button>
-              <div class="hint">Markdown supported. Cmd+Enter to send.</div>
+              <button type="button" data-toggle-preview="true">${previewToggleLabel}</button>
+              <div class="hint">Markdown supported. Paste images. Cmd+Enter to send.</div>
             </div>
-            <div class="field" style="padding: 14px 14px 0;">
-              <label>Message</label>
-              <textarea id="body" placeholder="Write a message. Use Cmd+Enter to send. Markdown and images are supported.">${escapeHTML(state.draft.body)}</textarea>
-            </div>
-            <div class="composer-preview">
-              <div class="field-label">Preview</div>
-              <div class="composer-preview-body markdown-body">${state.draft.body.trim() ? renderMarkdown(state.draft.body) : '<div class="composer-preview-empty">Markdown preview appears here.</div>'}</div>
+            <div class="${composerClass}">
+              <div class="field composer-editor">
+                <label>Message</label>
+                <textarea id="body" placeholder="Write a message. Use Cmd+Enter to send. Markdown and images are supported.">${escapeHTML(state.draft.body)}</textarea>
+              </div>
+              <div class="composer-preview ${state.previewOpen ? "is-open" : ""}">
+                <div class="field-label">Preview</div>
+                <div class="composer-preview-body markdown-body">${state.draft.body.trim() ? renderMarkdown(state.draft.body) : '<div class="composer-preview-empty">Markdown preview appears here.</div>'}</div>
+              </div>
             </div>
             <div class="composer-actions">
               <div class="hint">Replies, edits, and attachment uploads are appended as new commits.</div>
@@ -739,24 +743,10 @@ const render = () => {
     button.addEventListener("click", submitMessage);
   });
 
-  root.querySelectorAll("[data-insert-image]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      try {
-        const markdown = await call("InsertImage", {
-          userID: state.app?.currentUser || "",
-          channelID: state.selectedChannel,
-        }, { timeoutMs: 0 });
-        if (!markdown) return;
-        appendMarkdownToDraft(markdown);
-        const composer = root.querySelector("#body");
-        syncComposerPreview(root);
-        if (composer) {
-          composer.value = state.draft.body;
-          composer.focus();
-        }
-      } catch (err) {
-        showStatus("error", err.message || String(err));
-      }
+  root.querySelectorAll("[data-toggle-preview]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.previewOpen = !state.previewOpen;
+      render();
     });
   });
 

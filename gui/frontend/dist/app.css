@@ -470,6 +470,25 @@ button {
   cursor: not-allowed;
 }
 
+.composer-split {
+  display: block;
+}
+
+.composer-split.preview-open {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0;
+  align-items: start;
+}
+
+.composer-editor {
+  padding: 14px 14px 0;
+}
+
+.composer-split.preview-open .composer-editor {
+  padding-right: 8px;
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -512,11 +531,20 @@ button {
 }
 
 .composer-preview {
+  display: none;
   padding: 14px;
 }
 
+.composer-preview.is-open {
+  display: block;
+}
+
+.composer-split.preview-open .composer-preview {
+  padding-left: 8px;
+}
+
 .composer-preview-body {
-  min-height: 72px;
+  min-height: 160px;
   margin-top: 8px;
   padding: 14px;
   border-radius: 12px;
