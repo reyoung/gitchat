@@ -383,7 +383,7 @@ const render = () => {
           <h3>Current user</h3>
           <div class="detail-card">
             <strong>${escapeHTML(state.app.currentUser || "No default user")}</strong>
-            <span>Messages are sent from the matching `users/<id>` branch.</span>
+            <span>Messages are sent from the matching users/&lt;id&gt; branch.</span>
           </div>
         </section>
         <section class="detail-section">
