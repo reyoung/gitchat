@@ -874,6 +874,10 @@ const render = () => {
     previousStateForScroll.restoreAttempted = true;
     previousStateForScroll.channelID = state.selectedChannel;
   }
+  const channelListEl = root.querySelector(".channel-list");
+  if (channelListEl) {
+    channelListEl.scrollTop = channelListEl.scrollHeight;
+  }
 };
 
 const bootstrap = async () => {
