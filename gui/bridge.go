@@ -13,12 +13,14 @@ import (
 type serviceAPI interface {
 	Sync(context.Context) error
 	CreateUser(context.Context, string, string) error
+	UpdateUserProfile(context.Context, string, string) error
 	CreateChannel(context.Context, string, string, string) error
 	AddChannelMember(context.Context, string, string, string) error
 	CreateExperiment(context.Context, string, string, string, string, string) error
 	RetainExperimentAttempt(context.Context, string, string) error
 	SendMessage(context.Context, app.SendMessageInput) error
 	ListChannels(context.Context) ([]model.Channel, error)
+	ListUsers(context.Context) ([]model.User, error)
 	ListExperiments(context.Context) ([]model.Experiment, error)
 	ListMessagesByChannel(context.Context, string) ([]model.Message, error)
 }
@@ -31,6 +33,7 @@ type Bridge struct {
 
 type AppState struct {
 	CurrentUser          string           `json:"currentUser"`
+	CurrentUserAvatarURL string           `json:"currentUserAvatarURL"`
 	SelectedChannel      string           `json:"selectedChannel"`
 	SelectedChannelTitle string           `json:"selectedChannelTitle"`
 	Channels             []ChannelView    `json:"channels"`
@@ -54,6 +57,7 @@ type MessageView struct {
 	CommitHash    string `json:"commitHash"`
 	ShortHash     string `json:"shortHash"`
 	UserID        string `json:"userID"`
+	AvatarURL     string `json:"avatarURL"`
 	Subject       string `json:"subject"`
 	Body          string `json:"body"`
 	ReplyTo       string `json:"replyTo"`
@@ -76,6 +80,11 @@ type SendMessageRequest struct {
 
 type CreateUserRequest struct {
 	UserID string `json:"userID"`
+}
+
+type UpdateUserProfileRequest struct {
+	UserID    string `json:"userID"`
+	AvatarURL string `json:"avatarURL"`
 }
 
 type CreateChannelRequest struct {
@@ -156,6 +165,14 @@ func (b *Bridge) CreateUser(req CreateUserRequest) (AppState, error) {
 	return b.loadState("")
 }
 
+func (b *Bridge) UpdateUserProfile(req UpdateUserProfileRequest) (AppState, error) {
+	userID := firstNonEmpty(req.UserID, b.defaults.UserName)
+	if err := b.svc.UpdateUserProfile(context.Background(), userID, strings.TrimSpace(req.AvatarURL)); err != nil {
+		return AppState{}, err
+	}
+	return b.loadState("")
+}
+
 func (b *Bridge) CreateChannel(req CreateChannelRequest) (AppState, error) {
 	creator := firstNonEmpty(req.Creator, b.defaults.UserName)
 	if err := b.svc.CreateChannel(context.Background(), strings.TrimSpace(req.ChannelID), creator, strings.TrimSpace(req.Title)); err != nil {
@@ -199,6 +216,10 @@ func (b *Bridge) loadState(selectedChannel string) (AppState, error) {
 	if err != nil {
 		return AppState{}, err
 	}
+	users, err := b.svc.ListUsers(context.Background())
+	if err != nil {
+		return AppState{}, err
+	}
 	experiments, err := b.svc.ListExperiments(context.Background())
 	if err != nil {
 		return AppState{}, err
@@ -209,6 +230,13 @@ func (b *Bridge) loadState(selectedChannel string) (AppState, error) {
 		SelectedChannel: selectedChannel,
 		Channels:        make([]ChannelView, 0, len(channels)),
 		Experiments:     make([]ExperimentView, 0, len(experiments)),
+	}
+	userAvatarByID := map[string]string{}
+	for _, user := range users {
+		userAvatarByID[user.ID] = user.AvatarURL
+		if user.ID == b.defaults.UserName {
+			state.CurrentUserAvatarURL = user.AvatarURL
+		}
 	}
 	for _, channel := range channels {
 		title := strings.TrimSpace(channel.Title)
@@ -248,6 +276,7 @@ func (b *Bridge) loadState(selectedChannel string) (AppState, error) {
 			CommitHash:    message.CommitHash,
 			ShortHash:     shortSHA(message.CommitHash),
 			UserID:        message.UserID,
+			AvatarURL:     userAvatarByID[message.UserID],
 			Subject:       message.Subject,
 			Body:          message.Body,
 			ReplyTo:       message.ReplyTo,

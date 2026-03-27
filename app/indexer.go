@@ -60,15 +60,16 @@ func (i *Indexer) indexRef(ctx context.Context, ref model.RefState) error {
 
 func (i *Indexer) indexUserBranch(ctx context.Context, sourceRef, branch string) error {
 	userID := strings.TrimPrefix(branch, "users/")
-	if err := i.Store.ReplaceUserBranch(ctx, model.User{ID: userID, Branch: branch}); err != nil {
-		return err
-	}
 	commits, err := i.Repo.ListCommits(ctx, sourceRef)
 	if err != nil {
 		return err
 	}
+	user := model.User{ID: userID, Branch: branch}
 	messages := make([]model.Message, 0, len(commits))
 	for _, commit := range commits {
+		if avatarURL := strings.TrimSpace(commit.Trailers["User-Avatar-URL"]); avatarURL != "" {
+			user.AvatarURL = avatarURL
+		}
 		channelID := commit.Trailers["Channel"]
 		if channelID == "" {
 			continue
@@ -87,6 +88,9 @@ func (i *Indexer) indexUserBranch(ctx context.Context, sourceRef, branch string)
 			ExperimentSHA: commit.Trailers["Experiment-SHA"],
 			CreatedAt:     commit.CommitTime,
 		})
+	}
+	if err := i.Store.ReplaceUserBranch(ctx, user); err != nil {
+		return err
 	}
 	return i.Store.ReplaceUserMessages(ctx, branch, messages)
 }

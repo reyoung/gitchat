@@ -48,6 +48,10 @@ func (s *Service) Sync(ctx context.Context) error {
 }
 
 func (s *Service) CreateUser(ctx context.Context, userID, keyPath string) error {
+	return s.CreateUserProfile(ctx, userID, keyPath, "")
+}
+
+func (s *Service) CreateUserProfile(ctx context.Context, userID, keyPath, avatarURL string) error {
 	userID = strings.TrimSpace(userID)
 	if userID == "" {
 		return fmt.Errorf("user id is required")
@@ -58,6 +62,7 @@ func (s *Service) CreateUser(ctx context.Context, userID, keyPath string) error 
 		}
 		payload, err := json.MarshalIndent(map[string]any{
 			"id":         userID,
+			"avatar_url": strings.TrimSpace(avatarURL),
 			"created_at": s.Now().UTC().Format(time.RFC3339),
 		}, "", "  ")
 		if err != nil {
@@ -73,7 +78,10 @@ func (s *Service) CreateUser(ctx context.Context, userID, keyPath string) error 
 			}
 			files[filepath.ToSlash(filepath.Join("keys", userID+".pub"))] = keyData
 		}
-		if _, err := s.Repo.CommitFilesToBranch(ctx, "main", gitrepo.BuildCommitMessage("register user "+userID, "", nil), files); err != nil {
+		if _, err := s.Repo.CommitFilesToBranch(ctx, "main", gitrepo.BuildCommitMessage("register user "+userID, "", map[string]string{
+			"User-Id":         userID,
+			"User-Avatar-URL": strings.TrimSpace(avatarURL),
+		}), files); err != nil {
 			return err
 		}
 		mainHead, err := s.Repo.RevParse(ctx, "main")
@@ -84,6 +92,42 @@ func (s *Service) CreateUser(ctx context.Context, userID, keyPath string) error 
 			return err
 		}
 		if err := s.pushBranches(ctx, "main", "users/"+userID); err != nil {
+			return err
+		}
+		return s.Sync(ctx)
+	})
+}
+
+func (s *Service) UpdateUserProfile(ctx context.Context, userID, avatarURL string) error {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return fmt.Errorf("user id is required")
+	}
+	avatarURL = strings.TrimSpace(avatarURL)
+	if err := s.Sync(ctx); err != nil {
+		return err
+	}
+	if err := s.ensureUserBranch(ctx, userID); err != nil {
+		return err
+	}
+	return s.Repo.WithSavedBranch(ctx, func() error {
+		branch := "users/" + userID
+		if err := s.Repo.SwitchBranch(ctx, branch); err != nil {
+			return err
+		}
+		msg := gitrepo.BuildCommitMessage(
+			fmt.Sprintf("update profile %s", userID),
+			"",
+			map[string]string{
+				"Event-Type":      "update-user-profile",
+				"User-Id":         userID,
+				"User-Avatar-URL": avatarURL,
+			},
+		)
+		if err := s.Repo.Commit(ctx, msg, true); err != nil {
+			return err
+		}
+		if err := s.pushBranches(ctx, branch); err != nil {
 			return err
 		}
 		return s.Sync(ctx)
@@ -391,6 +435,10 @@ func (s *Service) ChannelHeads(ctx context.Context, channelID string) ([]string,
 
 func (s *Service) ListChannels(ctx context.Context) ([]model.Channel, error) {
 	return s.Store.ListChannels(ctx)
+}
+
+func (s *Service) ListUsers(ctx context.Context) ([]model.User, error) {
+	return s.Store.ListUsers(ctx)
 }
 
 func (s *Service) ListExperiments(ctx context.Context) ([]model.Experiment, error) {

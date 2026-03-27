@@ -13,7 +13,7 @@ const state = {
   modal: null,
   status: null,
   profile: {
-    avatarText: "GC",
+    avatarURL: "",
   },
 };
 
@@ -30,6 +30,19 @@ const escapeHTML = (value) =>
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+
+const initialsForUser = (userID) => {
+  const cleaned = String(userID || "").trim();
+  if (!cleaned) return "GC";
+  return cleaned.slice(0, 2).toUpperCase();
+};
+
+const renderAvatar = (avatarURL, fallback, className = "avatar") => {
+  if (avatarURL) {
+    return `<img class="${className}" src="${escapeHTML(avatarURL)}" alt="${escapeHTML(fallback)}" />`;
+  }
+  return `<div class="${className} fallback">${escapeHTML(initialsForUser(fallback))}</div>`;
+};
 
 const showStatus = (kind, text) => {
   state.status = { kind, text };
@@ -120,12 +133,17 @@ const modalPresets = {
   },
   editProfile: {
     title: "Edit profile",
-    description: "Choose the avatar text shown in the sidebar and on your messages.",
+    description: "Set the avatar URL shown in the sidebar and on your messages.",
     fields: [
-      { name: "avatarText", label: "Avatar", placeholder: "YY", value: () => state.profile.avatarText || "GC" },
+      { name: "avatarURL", label: "Avatar URL", placeholder: "https://example.com/avatar.png", value: () => state.profile.avatarURL || state.app?.currentUserAvatarURL || "" },
     ],
     action: async (values) => {
-      state.profile.avatarText = (values.avatarText || "GC").trim().slice(0, 2) || "GC";
+      const appState = await call("UpdateUserProfile", {
+        userID: state.app?.currentUser || "",
+        avatarURL: values.avatarURL || "",
+      });
+      state.app = appState;
+      state.profile.avatarURL = (values.avatarURL || "").trim();
       render();
       showStatus("success", "Profile updated");
     },
@@ -296,11 +314,14 @@ const renderMessageCard = (message, options = {}) => {
   return `
     <article class="message-card${mine}">
       <div class="message-top">
-        <span class="message-author">${escapeHTML(message.userID)}</span>
-        <span class="message-time">${escapeHTML(message.createdAt)}</span>
-        <span class="message-sha">${escapeHTML(message.shortHash)}</span>
-        ${reply}
-        ${edited}
+        ${renderAvatar(message.avatarURL, message.userID)}
+        <div class="message-meta">
+          <span class="message-author">${escapeHTML(message.userID)}</span>
+          <span class="message-time">${escapeHTML(message.createdAt)}</span>
+          <span class="message-sha">${escapeHTML(message.shortHash)}</span>
+          ${reply}
+          ${edited}
+        </div>
       </div>
       <div class="message-body">${escapeHTML(message.body || "")}</div>
       ${tags.length ? `<div class="message-tags">${tags.join("")}</div>` : ""}
@@ -427,7 +448,7 @@ const render = () => {
   root.innerHTML = `
     <div class="shell">
       <aside class="workspace-rail">
-        <button class="workspace-badge" data-open-modal="editProfile">${escapeHTML(state.profile.avatarText || "GC")}</button>
+        <button class="workspace-badge" data-open-modal="editProfile">${renderAvatar(state.app.currentUserAvatarURL || state.profile.avatarURL, state.app.currentUser || "GC", "workspace-avatar")}</button>
         <div class="workspace-user">
           <div>GitChat</div>
           <div>${escapeHTML(state.app.currentUser || "unconfigured user")}</div>

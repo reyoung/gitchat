@@ -3,8 +3,9 @@ package model
 import "time"
 
 type User struct {
-	ID     string
-	Branch string
+	ID        string
+	Branch    string
+	AvatarURL string
 }
 
 type Channel struct {

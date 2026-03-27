@@ -78,6 +78,25 @@ button {
   background: rgba(255, 255, 255, 0.2);
 }
 
+.workspace-avatar,
+.avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+  display: block;
+}
+
+.workspace-avatar.fallback,
+.avatar.fallback {
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
 .workspace-user {
   color: rgba(255, 255, 255, 0.86);
   font-size: 12px;
@@ -283,10 +302,24 @@ button {
 
 .message-top {
   display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.avatar {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  border-radius: 12px;
+}
+
+.message-meta {
+  display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  margin-bottom: 8px;
+  min-height: 38px;
 }
 
 .message-author {

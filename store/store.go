@@ -44,7 +44,8 @@ func (s *Store) Migrate(ctx context.Context) error {
 		)`,
 		`CREATE TABLE IF NOT EXISTS users (
 			id TEXT PRIMARY KEY,
-			branch TEXT NOT NULL
+			branch TEXT NOT NULL,
+			avatar_url TEXT NOT NULL DEFAULT ''
 		)`,
 		`CREATE TABLE IF NOT EXISTS channels (
 			id TEXT PRIMARY KEY,
@@ -99,6 +100,9 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, `ALTER TABLE messages ADD COLUMN edit_of TEXT NOT NULL DEFAULT ''`); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
 		return fmt.Errorf("add messages.edit_of: %w", err)
 	}
+	if _, err := s.db.ExecContext(ctx, `ALTER TABLE users ADD COLUMN avatar_url TEXT NOT NULL DEFAULT ''`); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("add users.avatar_url: %w", err)
+	}
 	return nil
 }
 
@@ -115,8 +119,8 @@ func (s *Store) GetRefHead(ctx context.Context, name string) (string, bool, erro
 }
 
 func (s *Store) ReplaceUserBranch(ctx context.Context, user model.User) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO users(id, branch) VALUES(?, ?)
-		ON CONFLICT(id) DO UPDATE SET branch = excluded.branch`, user.ID, user.Branch)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO users(id, branch, avatar_url) VALUES(?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET branch = excluded.branch, avatar_url = excluded.avatar_url`, user.ID, user.Branch, user.AvatarURL)
 	return err
 }
 
@@ -247,7 +251,7 @@ func (s *Store) ListChannels(ctx context.Context) ([]model.Channel, error) {
 }
 
 func (s *Store) ListUsers(ctx context.Context) ([]model.User, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, branch FROM users ORDER BY id`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, branch, avatar_url FROM users ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +259,7 @@ func (s *Store) ListUsers(ctx context.Context) ([]model.User, error) {
 	var users []model.User
 	for rows.Next() {
 		var user model.User
-		if err := rows.Scan(&user.ID, &user.Branch); err != nil {
+		if err := rows.Scan(&user.ID, &user.Branch, &user.AvatarURL); err != nil {
 			return nil, err
 		}
 		users = append(users, user)

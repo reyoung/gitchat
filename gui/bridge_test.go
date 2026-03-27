@@ -21,6 +21,7 @@ func (f *fakeService) Sync(context.Context) error { return f.defaultError }
 func (f *fakeService) CreateUser(context.Context, string, string) error {
 	return f.defaultError
 }
+func (f *fakeService) UpdateUserProfile(context.Context, string, string) error { return f.defaultError }
 func (f *fakeService) CreateChannel(context.Context, string, string, string) error {
 	return f.defaultError
 }
@@ -40,6 +41,9 @@ func (f *fakeService) SendMessage(_ context.Context, in app.SendMessageInput) er
 }
 func (f *fakeService) ListChannels(context.Context) ([]model.Channel, error) {
 	return f.channels, f.defaultError
+}
+func (f *fakeService) ListUsers(context.Context) ([]model.User, error) {
+	return []model.User{{ID: "alice", Branch: "users/alice", AvatarURL: "https://example.com/a.png"}}, f.defaultError
 }
 func (f *fakeService) ListExperiments(context.Context) ([]model.Experiment, error) {
 	return f.experiments, f.defaultError
