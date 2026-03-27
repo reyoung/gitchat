@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	git "github.com/go-git/go-git/v5"
 )
 
 func defaultRepoSpec() string {
@@ -90,4 +92,13 @@ func isGitDir(path string) bool {
 		return false
 	}
 	return true
+}
+
+func isBareLocalRepoPath(path string) bool {
+	repo, err := git.PlainOpen(path)
+	if err != nil {
+		return false
+	}
+	_, err = repo.Worktree()
+	return err != nil
 }

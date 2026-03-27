@@ -99,8 +99,13 @@ func openService(ctx context.Context, repoSpec, dbPath string) (*app.Service, fu
 	var repo *gitrepo.Repo
 	svc := app.NewService(nil, s)
 	if resolvedPath, ok := resolveLocalRepoPath(repoSpec); ok {
-		repo = gitrepo.New(resolvedPath)
-		svc.RemoteName = ""
+		if isBareLocalRepoPath(resolvedPath) {
+			repo = gitrepo.NewRemote(resolvedPath)
+			svc.RemoteName = "origin"
+		} else {
+			repo = gitrepo.New(resolvedPath)
+			svc.RemoteName = ""
+		}
 	} else {
 		repo = gitrepo.NewRemote(repoSpec)
 		svc.RemoteName = "origin"
