@@ -6,6 +6,7 @@ const state = {
   selectedThread: "",
   attachmentCache: new Map(),
   previewOpen: false,
+  sidebarOpen: true,
   autoRefreshTimer: null,
   composerHeight: 160,
   messageScrollBottomOffset: 0,
@@ -818,6 +819,18 @@ const render = () => {
       `,
     )
     .join("");
+  const railChannels = state.app.channels
+    .map((channel) => `
+      <button
+        class="rail-channel ${channel.id === state.selectedChannel ? "active" : ""}"
+        data-channel-id="${escapeHTML(channel.id)}"
+        title="# ${escapeHTML(channel.id)}"
+      >
+        <span>#</span>
+        <span>${escapeHTML(channel.id).slice(0, 2).toUpperCase()}</span>
+      </button>
+    `)
+    .join("");
 
   const selectedTitle = state.app.selectedChannelTitle || "Pick a channel";
   const selectedMeta = state.selectedChannel
@@ -858,9 +871,11 @@ const render = () => {
     : "";
 
   root.innerHTML = `
-    <div class="shell">
+    <div class="shell ${state.sidebarOpen ? "" : "sidebar-collapsed"}">
       <aside class="workspace-rail">
         <button class="workspace-badge" data-update-avatar="true">${renderAvatar(state.app.currentUserAvatarURL, state.app.currentUser || "GC", "workspace-avatar")}</button>
+        <button class="rail-toggle" type="button" data-toggle-sidebar="true" title="${state.sidebarOpen ? "Hide channels" : "Show channels"}">${state.sidebarOpen ? "◀" : "▶"}</button>
+        ${state.sidebarOpen ? "" : `<div class="rail-channels">${railChannels}</div>`}
         <div class="workspace-user">
           <div>GitChat</div>
           <div>${escapeHTML(state.app.currentUser || "unconfigured user")}</div>
@@ -928,6 +943,13 @@ const render = () => {
     button.addEventListener("click", async () => {
       state.selectedChannel = button.dataset.channelId || "";
       await refreshState(state.selectedChannel);
+    });
+  });
+
+  root.querySelectorAll("[data-toggle-sidebar]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.sidebarOpen = !state.sidebarOpen;
+      render();
     });
   });
 

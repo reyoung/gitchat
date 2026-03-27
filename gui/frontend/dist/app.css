@@ -54,10 +54,19 @@ button {
   overflow: hidden;
 }
 
+.shell.sidebar-collapsed {
+  grid-template-columns: 84px 0 minmax(520px, 1fr);
+}
+
 .workspace-rail {
   background: linear-gradient(180deg, #4a154b 0%, #320f37 100%);
   padding: 20px 16px;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  overflow: hidden;
 }
 
 .workspace-badge {
@@ -104,6 +113,55 @@ button {
   font-size: 12px;
   line-height: 1.5;
   word-break: break-word;
+  width: 100%;
+  margin-top: auto;
+}
+
+.rail-toggle,
+.rail-channel {
+  width: 52px;
+  min-height: 52px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  transition: background 120ms ease, transform 120ms ease, border-color 120ms ease;
+}
+
+.rail-toggle:hover,
+.rail-channel:hover {
+  background: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
+}
+
+.rail-toggle {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.rail-channels {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  overflow: auto;
+  padding: 2px 0;
+}
+
+.rail-channel {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  gap: 2px;
+}
+
+.rail-channel.active {
+  background: rgba(18, 100, 163, 0.9);
+  border-color: rgba(133, 197, 255, 0.36);
 }
 
 .sidebar {
@@ -113,6 +171,12 @@ button {
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+}
+
+.shell.sidebar-collapsed .sidebar {
+  opacity: 0;
+  pointer-events: none;
+  border-right: 0;
 }
 
 .sidebar-header,
