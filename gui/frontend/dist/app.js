@@ -624,6 +624,17 @@ const renderMessageCard = (message, options = {}) => {
   if (!options.hideThreadButton) {
     actions.push(`<button type="button" class="message-action icon" title="Open thread" aria-label="Open thread" data-open-thread="${escapeHTML(message.commitHash)}">›</button>`);
   }
+  if (message.deleted) {
+    return `
+      <article class="message-card${mine} deleted-line">
+        <div class="deleted-line-rule"></div>
+        <div class="deleted-line-main">
+          <span class="deleted-line-label">Deleted</span>
+          <div class="message-actions">${actions.join("")}</div>
+        </div>
+      </article>
+    `;
+  }
   return `
     <article class="message-card${mine}${message.deleted ? " deleted-collapsed" : ""}">
       <div class="message-rail">

@@ -521,6 +521,39 @@ button {
   display: none;
 }
 
+.message-card.deleted-line {
+  display: block;
+  max-width: 920px;
+  padding: 6px 2px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.deleted-line-rule {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.deleted-line-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+.deleted-line-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.deleted-line .message-actions {
+  margin: 0;
+  min-height: 0;
+}
+
 .tag {
   border-radius: 999px;
   padding: 5px 10px;
