@@ -56,7 +56,18 @@ const markdownBlocks = (value) => {
   const lines = String(value || "").replaceAll("\r\n", "\n").split("\n");
   const blocks = [];
   let paragraph = [];
+  let listItems = [];
   let codeFence = null;
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    blocks.push({ type: "paragraph", text: paragraph.join("\n") });
+    paragraph = [];
+  };
+  const flushList = () => {
+    if (!listItems.length) return;
+    blocks.push({ type: "list", items: [...listItems] });
+    listItems = [];
+  };
   for (const line of lines) {
     if (line.startsWith("```")) {
       if (codeFence) {
@@ -64,10 +75,8 @@ const markdownBlocks = (value) => {
         paragraph = [];
         codeFence = null;
       } else {
-        if (paragraph.length) {
-          blocks.push({ type: "paragraph", text: paragraph.join("\n") });
-          paragraph = [];
-        }
+        flushParagraph();
+        flushList();
         codeFence = line.slice(3).trim();
       }
       continue;
@@ -77,14 +86,20 @@ const markdownBlocks = (value) => {
       continue;
     }
     if (!line.trim()) {
-      if (paragraph.length) {
-        blocks.push({ type: "paragraph", text: paragraph.join("\n") });
-        paragraph = [];
-      }
+      flushParagraph();
+      flushList();
       continue;
     }
+    const listMatch = line.match(/^\s*[-*]\s+(.+)$/);
+    if (listMatch) {
+      flushParagraph();
+      listItems.push(listMatch[1]);
+      continue;
+    }
+    flushList();
     paragraph.push(line);
   }
+  flushList();
   if (paragraph.length) {
     blocks.push({ type: codeFence !== null ? "code" : "paragraph", language: codeFence || "", text: paragraph.join("\n") });
   }
@@ -119,9 +134,21 @@ const renderMarkdown = (value) => markdownBlocks(value)
     if (block.type === "code") {
       return `<pre class="message-code"><code>${escapeHTML(block.text)}</code></pre>`;
     }
+    if (block.type === "list") {
+      return `<ul>${block.items.map((item) => `<li>${renderInlineMarkdown(item)}</li>`).join("")}</ul>`;
+    }
     return `<p>${renderInlineMarkdown(block.text)}</p>`;
   })
   .join("") || `<p>${renderInlineMarkdown(value || "")}</p>`;
+
+const syncComposerPreview = (root = document) => {
+  const preview = root.querySelector(".composer-preview-body");
+  if (!preview) return;
+  preview.innerHTML = state.draft.body.trim()
+    ? renderMarkdown(state.draft.body)
+    : '<div class="composer-preview-empty">Markdown preview appears here.</div>';
+  hydrateRenderedMarkdown(preview);
+};
 
 const showStatus = (kind, text) => {
   state.status = { kind, text };
@@ -669,7 +696,10 @@ const render = () => {
   });
 
   const bodyInput = root.querySelector("#body");
-  if (bodyInput) bodyInput.addEventListener("input", (event) => { state.draft.body = event.target.value; });
+  if (bodyInput) bodyInput.addEventListener("input", (event) => {
+    state.draft.body = event.target.value;
+    syncComposerPreview(root);
+  });
   if (bodyInput) bodyInput.addEventListener("keydown", async (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
@@ -719,7 +749,11 @@ const render = () => {
         if (!markdown) return;
         appendMarkdownToDraft(markdown);
         const composer = root.querySelector("#body");
-        if (composer) composer.focus();
+        syncComposerPreview(root);
+        if (composer) {
+          composer.value = state.draft.body;
+          composer.focus();
+        }
       } catch (err) {
         showStatus("error", err.message || String(err));
       }
@@ -747,6 +781,7 @@ const render = () => {
   });
 
   hydrateRenderedMarkdown(root);
+  syncComposerPreview(root);
 };
 
 const bootstrap = async () => {
