@@ -153,10 +153,10 @@ button {
 }
 
 .rail-channel {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1;
-  gap: 2px;
+  letter-spacing: 0.02em;
 }
 
 .rail-channel.active {

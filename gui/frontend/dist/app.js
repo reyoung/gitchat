@@ -909,9 +909,8 @@ const render = () => {
       <button
         class="rail-channel ${channel.id === state.selectedChannel ? "active" : ""}"
         data-channel-id="${escapeHTML(channel.id)}"
-        title="# ${escapeHTML(channel.id)}"
+        title="${escapeHTML(channel.id)}"
       >
-        <span>#</span>
         <span>${escapeHTML(channel.id).slice(0, 2).toUpperCase()}</span>
       </button>
     `)
