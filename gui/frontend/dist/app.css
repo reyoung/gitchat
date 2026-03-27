@@ -296,11 +296,15 @@ button {
 
 .message-card {
   max-width: 920px;
-  padding: 14px 16px;
+  padding: 16px;
   border-radius: 16px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.05);
   box-shadow: var(--shadow);
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
 }
 
 .message-card.mine {
@@ -308,30 +312,31 @@ button {
   background: linear-gradient(180deg, rgba(46, 182, 125, 0.12), rgba(255, 255, 255, 0.05));
 }
 
-.message-top {
+.message-rail {
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
   gap: 10px;
-  margin-bottom: 8px;
 }
 
 .avatar {
-  width: 38px;
-  height: 38px;
-  min-width: 38px;
+  width: 46px;
+  height: 46px;
+  min-width: 46px;
   border-radius: 12px;
 }
 
 .message-meta {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  min-height: 38px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 0;
 }
 
 .message-author {
   font-weight: 700;
+  font-size: 15px;
 }
 
 .message-time,
@@ -339,11 +344,20 @@ button {
 .message-thread {
   color: var(--muted);
   font-size: 12px;
+  line-height: 1.35;
+}
+
+.message-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .message-body {
   line-height: 1.55;
   color: rgba(255, 255, 255, 0.92);
+  min-width: 0;
 }
 
 .markdown-body p {
@@ -410,7 +424,8 @@ button {
 .message-actions {
   display: flex;
   justify-content: flex-end;
-  margin-top: 12px;
+  gap: 8px;
+  min-height: 28px;
 }
 
 .message-action {
@@ -418,9 +433,19 @@ button {
   background: rgba(255, 255, 255, 0.04);
   color: var(--muted);
   border-radius: 999px;
-  padding: 6px 12px;
+  padding: 6px 10px;
   font-size: 12px;
   font-weight: 600;
+}
+
+.message-action.icon {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  line-height: 1;
 }
 
 .message-action:hover {
@@ -440,6 +465,15 @@ button {
 
 .message-body.is-deleted {
   color: var(--muted);
+}
+
+.message-body.compact {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.message-body.compact p {
+  margin: 0;
 }
 
 .tag {

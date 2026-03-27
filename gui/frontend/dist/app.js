@@ -617,19 +617,16 @@ const renderMessageCard = (message, options = {}) => {
     tags.push(`<span class="tag experiment">experiment ${escapeHTML(message.experimentID)}${sha}</span>`);
   }
   const actions = [];
-  if (!message.deleted) {
-    actions.push(`<button type="button" class="message-action" data-reply-hash="${escapeHTML(message.commitHash)}">Reply</button>`);
-  }
   if (message.userID === state.app.currentUser && !message.deleted) {
-    actions.push(`<button type="button" class="message-action" data-edit-hash="${escapeHTML(message.commitHash)}">Edit</button>`);
-    actions.push(`<button type="button" class="message-action danger" data-delete-hash="${escapeHTML(message.commitHash)}">Delete</button>`);
+    actions.push(`<button type="button" class="message-action icon" title="Edit" aria-label="Edit" data-edit-hash="${escapeHTML(message.commitHash)}">✎</button>`);
+    actions.push(`<button type="button" class="message-action icon danger" title="Delete" aria-label="Delete" data-delete-hash="${escapeHTML(message.commitHash)}">×</button>`);
   }
   if (!options.hideThreadButton) {
-    actions.push(`<button type="button" class="message-action" data-open-thread="${escapeHTML(message.commitHash)}">Thread</button>`);
+    actions.push(`<button type="button" class="message-action icon" title="Open thread" aria-label="Open thread" data-open-thread="${escapeHTML(message.commitHash)}">›</button>`);
   }
   return `
     <article class="message-card${mine}">
-      <div class="message-top">
+      <div class="message-rail">
         ${renderAvatar(message.avatarURL, message.userID)}
         <div class="message-meta">
           <span class="message-author">${escapeHTML(message.userID)}</span>
@@ -640,9 +637,11 @@ const renderMessageCard = (message, options = {}) => {
           ${deleted}
         </div>
       </div>
-      <div class="message-body markdown-body ${message.deleted ? "is-deleted" : ""}">${message.deleted ? '<p><em>This message was deleted.</em></p>' : renderMarkdown(message.body || "")}</div>
-      ${tags.length ? `<div class="message-tags">${tags.join("")}</div>` : ""}
-      <div class="message-actions">${actions.join("")}</div>
+      <div class="message-main">
+        <div class="message-actions">${actions.join("")}</div>
+        <div class="message-body markdown-body ${message.deleted ? "is-deleted compact" : ""}">${message.deleted ? '<p><em>Deleted.</em></p>' : renderMarkdown(message.body || "")}</div>
+        ${tags.length ? `<div class="message-tags">${tags.join("")}</div>` : ""}
+      </div>
     </article>
   `;
 };
