@@ -4,10 +4,8 @@ const state = {
   app: null,
   selectedChannel: "",
   draft: {
-    subject: "",
     body: "",
     replyTo: "",
-    experimentID: "",
     experimentSHA: "",
   },
   modal: null,
@@ -67,9 +65,6 @@ const refreshState = async (selectedChannel = state.selectedChannel) => {
   const appState = await call("GetState", selectedChannel || "");
   state.app = appState;
   state.selectedChannel = appState.selectedChannel || "";
-  if (!state.draft.experimentID && appState.experiments.length > 0) {
-    state.draft.experimentID = appState.experiments[0].id;
-  }
   render();
 };
 
@@ -78,15 +73,14 @@ const submitMessage = async () => {
     const appState = await call("SendMessage", {
       userID: state.app?.currentUser || "",
       channelID: state.selectedChannel,
-      subject: state.draft.subject,
+      subject: "",
       body: state.draft.body,
       replyTo: state.draft.replyTo,
-      experimentID: state.draft.experimentID,
+      experimentID: "",
       experimentSHA: state.draft.experimentSHA,
     });
     state.app = appState;
     state.selectedChannel = appState.selectedChannel || "";
-    state.draft.subject = "";
     state.draft.body = "";
     state.draft.replyTo = "";
     state.draft.experimentSHA = "";
@@ -203,6 +197,20 @@ const submitModal = async () => {
   }
 };
 
+const startReply = (commitHash) => {
+  state.draft.replyTo = commitHash || "";
+  render();
+  const composer = document.querySelector("#body");
+  if (composer) composer.focus();
+};
+
+const clearReply = () => {
+  state.draft.replyTo = "";
+  render();
+  const composer = document.querySelector("#body");
+  if (composer) composer.focus();
+};
+
 const renderMessages = () => {
   if (!state.app?.messages?.length) {
     return `
@@ -228,9 +236,11 @@ const renderMessages = () => {
             <span class="message-sha">${escapeHTML(message.shortHash)}</span>
             ${reply}
           </div>
-          <div class="message-subject">${escapeHTML(message.subject || "(no subject)")}</div>
           <div class="message-body">${escapeHTML(message.body || "")}</div>
           ${tags.length ? `<div class="message-tags">${tags.join("")}</div>` : ""}
+          <div class="message-actions">
+            <button type="button" class="message-action" data-reply-hash="${escapeHTML(message.commitHash)}">Reply</button>
+          </div>
         </article>
       `;
     })
@@ -315,6 +325,14 @@ const render = () => {
   const selectedMeta = state.selectedChannel
     ? `Channel branch: channels/${escapeHTML(state.selectedChannel)}`
     : "Create a channel to start chatting";
+  const replyBanner = state.draft.replyTo
+    ? `
+      <div class="reply-banner">
+        <span>Replying to ${escapeHTML(state.draft.replyTo.slice(0, 10))}</span>
+        <button type="button" data-clear-reply="true">Cancel reply</button>
+      </div>
+    `
+    : "";
 
   root.innerHTML = `
     <div class="shell">
@@ -361,26 +379,13 @@ const render = () => {
         <section class="messages">${renderMessages()}</section>
         <section class="composer">
           <div class="composer-card">
-            <div class="composer-meta">
-              <div class="field">
-                <label>Subject</label>
-                <input id="subject" placeholder="Short summary" value="${escapeHTML(state.draft.subject)}" />
-              </div>
-              <div class="field">
-                <label>Reply To</label>
-                <input id="replyTo" placeholder="Optional commit hash" value="${escapeHTML(state.draft.replyTo)}" />
-              </div>
-              <div class="field">
-                <label>Experiment</label>
-                <input id="experimentID" placeholder="Optional experiment id" value="${escapeHTML(state.draft.experimentID)}" />
-              </div>
-            </div>
+            ${replyBanner}
             <div class="field" style="padding: 14px 14px 0;">
               <label>Message</label>
-              <textarea id="body" placeholder="Write a channel update, design note, or experiment handoff.">${escapeHTML(state.draft.body)}</textarea>
+              <textarea id="body" placeholder="Write a message. Use Cmd+Enter to send.">${escapeHTML(state.draft.body)}</textarea>
             </div>
             <div class="composer-actions">
-              <div class="hint">Slack-like shell, backed by your existing GitChat branch model.</div>
+              <div class="hint">Cmd+Enter to send. Replies are attached from each message card.</div>
               <button class="primary" data-send="true">Send message</button>
             </div>
           </div>
@@ -455,14 +460,14 @@ const render = () => {
     button.addEventListener("click", submitModal);
   });
 
-  const subjectInput = root.querySelector("#subject");
   const bodyInput = root.querySelector("#body");
-  const replyInput = root.querySelector("#replyTo");
-  const experimentInput = root.querySelector("#experimentID");
-  if (subjectInput) subjectInput.addEventListener("input", (event) => { state.draft.subject = event.target.value; });
   if (bodyInput) bodyInput.addEventListener("input", (event) => { state.draft.body = event.target.value; });
-  if (replyInput) replyInput.addEventListener("input", (event) => { state.draft.replyTo = event.target.value; });
-  if (experimentInput) experimentInput.addEventListener("input", (event) => { state.draft.experimentID = event.target.value; });
+  if (bodyInput) bodyInput.addEventListener("keydown", async (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      event.preventDefault();
+      await submitMessage();
+    }
+  });
 
   root.querySelectorAll("[data-refresh]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -477,6 +482,14 @@ const render = () => {
 
   root.querySelectorAll("[data-send]").forEach((button) => {
     button.addEventListener("click", submitMessage);
+  });
+
+  root.querySelectorAll("[data-reply-hash]").forEach((button) => {
+    button.addEventListener("click", () => startReply(button.dataset.replyHash || ""));
+  });
+
+  root.querySelectorAll("[data-clear-reply]").forEach((button) => {
+    button.addEventListener("click", clearReply);
   });
 };
 

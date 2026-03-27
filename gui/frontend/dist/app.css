@@ -270,12 +270,6 @@ button {
   font-size: 12px;
 }
 
-.message-subject {
-  font-size: 15px;
-  font-weight: 700;
-  margin-bottom: 6px;
-}
-
 .message-body {
   white-space: pre-wrap;
   line-height: 1.55;
@@ -287,6 +281,27 @@ button {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
+}
+
+.message-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.message-action {
+  border: 1px solid var(--line-strong);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.message-action:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
 }
 
 .tag {
@@ -316,14 +331,6 @@ button {
   overflow: hidden;
 }
 
-.composer-meta {
-  display: grid;
-  grid-template-columns: 1.2fr 1fr 1fr;
-  gap: 12px;
-  padding: 14px;
-  border-bottom: 1px solid var(--line);
-}
-
 .field {
   display: flex;
   flex-direction: column;
@@ -349,7 +356,7 @@ button {
 }
 
 .field textarea {
-  min-height: 140px;
+  min-height: 160px;
   resize: vertical;
 }
 
@@ -364,6 +371,27 @@ button {
   align-items: center;
   gap: 12px;
   padding: 14px;
+}
+
+.reply-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(18, 100, 163, 0.14);
+  color: #c7ddff;
+}
+
+.reply-banner button {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .hint {
@@ -532,10 +560,6 @@ button {
   .workspace-rail,
   .sidebar {
     display: none;
-  }
-
-  .composer-meta {
-    grid-template-columns: 1fr;
   }
 
   .panel-header {
