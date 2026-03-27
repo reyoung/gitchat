@@ -515,6 +515,17 @@ button {
   background: rgba(255, 255, 255, 0.05);
 }
 
+.message-image.pending-image {
+  border-style: dashed;
+  border-color: rgba(123, 183, 255, 0.38);
+  box-shadow: none;
+}
+
+.pending-image-missing {
+  color: var(--muted);
+  font-style: italic;
+}
+
 .message-tags {
   display: flex;
   flex-wrap: wrap;

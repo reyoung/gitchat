@@ -15,6 +15,7 @@ const state = {
     replyTo: "",
     editOf: "",
     experimentSHA: "",
+    pendingImages: [],
   },
   modal: null,
   confirmDelete: "",
@@ -23,6 +24,7 @@ const state = {
     inFlight: false,
     error: "",
     operation: "",
+    detail: "",
     retryAction: "",
     retryPayload: null,
   },
@@ -69,6 +71,12 @@ const renderAvatar = (avatarURL, fallback, className = "avatar") => {
   }
   return `<div class="${className} fallback">${escapeHTML(initialsForUser(fallback))}</div>`;
 };
+
+const pendingImageURI = (id) => `gitchat-pending://${id}`;
+
+const makePendingImageID = () => `pending-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+const findPendingImage = (id) => state.draft.pendingImages.find((image) => image.id === id);
 
 const markdownBlocks = (value) => {
   const lines = String(value || "").replaceAll("\r\n", "\n").split("\n");
@@ -128,6 +136,11 @@ const renderInlineMarkdown = (value) => {
   let html = escapeHTML(value);
   html = html.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_, alt, src) => {
     const safeAlt = escapeHTML(alt);
+    if (src.startsWith("gitchat-pending://")) {
+      const pending = findPendingImage(src.replace("gitchat-pending://", ""));
+      if (!pending) return `<span class="pending-image-missing">${safeAlt || "Pending image"}</span>`;
+      return `<img class="message-image pending-image" src="${escapeHTML(pending.dataURL)}" alt="${safeAlt}" />`;
+    }
     if (src.startsWith("gitchat-attachment://")) {
       try {
         const url = new URL(src);
@@ -231,21 +244,25 @@ const appendMarkdownToDraft = (markdown) => {
   render();
 };
 
-const uploadPastedImageFile = async (file) => {
+const readFileAsDataURL = async (file) => {
   const reader = new FileReader();
-  const dataURL = await new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     reader.onerror = () => reject(new Error("Failed to read pasted image"));
     reader.onload = () => resolve(String(reader.result || ""));
     reader.readAsDataURL(file);
   });
-  const markdown = await call("UploadPastedImage", {
-    userID: state.app?.currentUser || "",
-    channelID: state.selectedChannel,
+};
+
+const uploadPastedImageFile = async (file) => {
+  const dataURL = await readFileAsDataURL(file);
+  const pendingImage = {
+    id: makePendingImageID(),
     filename: file.name || "pasted-image.png",
     dataURL,
-  }, { timeoutMs: 0 });
-  appendMarkdownToDraft(markdown);
-  showStatus("success", "Image pasted");
+  };
+  state.draft.pendingImages.push(pendingImage);
+  appendMarkdownToDraft(`![${pendingImage.filename}](${pendingImageURI(pendingImage.id)})`);
+  showStatus("success", "Image added to draft");
 };
 
 const waitForBridge = async () => {
@@ -309,6 +326,57 @@ const buildSendPayload = () => ({
   experimentSHA: state.draft.experimentSHA,
 });
 
+const buildDraftSnapshot = () => ({
+  payload: buildSendPayload(),
+  pendingImages: state.draft.pendingImages.map((image) => ({ ...image })),
+});
+
+const extractPendingImageIDs = (body) => {
+  const matches = body.matchAll(/gitchat-pending:\/\/([a-z0-9-]+)/gi);
+  return [...new Set(Array.from(matches, (match) => match[1]))];
+};
+
+const extractAttachmentURI = (markdown) => {
+  const match = String(markdown || "").match(/!\[[^\]]*\]\(([^)\s]+)\)/);
+  if (!match) {
+    throw new Error("Failed to resolve uploaded image");
+  }
+  return match[1];
+};
+
+const resolvePendingImagesForPayload = async (payload, pendingImages) => {
+  const imagesByID = new Map(pendingImages.map((image) => [image.id, image]));
+  let resolvedPayload = { ...payload };
+  const pendingIDs = extractPendingImageIDs(resolvedPayload.body);
+  for (let index = 0; index < pendingIDs.length; index += 1) {
+    const pendingID = pendingIDs[index];
+    const pendingImage = imagesByID.get(pendingID);
+    if (!pendingImage) {
+      throw new Error("Draft image is missing from memory");
+    }
+    setSendState({
+      detail: `Uploading image ${index + 1}/${pendingIDs.length}…`,
+      retryPayload: {
+        payload: resolvedPayload,
+        pendingImages: pendingImages.filter((image) => image.id !== pendingID),
+      },
+    });
+    render();
+    const markdown = await call("UploadPastedImage", {
+      userID: resolvedPayload.userID,
+      channelID: resolvedPayload.channelID,
+      filename: pendingImage.filename,
+      dataURL: pendingImage.dataURL,
+    }, { timeoutMs: 0 });
+    const attachmentURI = extractAttachmentURI(markdown);
+    resolvedPayload = {
+      ...resolvedPayload,
+      body: resolvedPayload.body.replaceAll(pendingImageURI(pendingID), attachmentURI),
+    };
+  }
+  return resolvedPayload;
+};
+
 const setSendState = (next) => {
   state.send = {
     ...state.send,
@@ -316,28 +384,41 @@ const setSendState = (next) => {
   };
 };
 
-const submitMessage = async (payload = buildSendPayload()) => {
+const submitMessage = async (draftSnapshot = buildDraftSnapshot()) => {
   if (state.send.inFlight) return;
+  let currentSnapshot = {
+    payload: { ...draftSnapshot.payload },
+    pendingImages: (draftSnapshot.pendingImages || []).map((image) => ({ ...image })),
+  };
   try {
     setSendState({
       inFlight: true,
       error: "",
       operation: "send",
+      detail: `Sending to #${state.selectedChannel || "channel"}…`,
       retryAction: "send",
-      retryPayload: payload,
+      retryPayload: currentSnapshot,
     });
     render();
-    const appState = await call("SendMessage", payload, { timeoutMs: 0 });
+    currentSnapshot.payload = await resolvePendingImagesForPayload(currentSnapshot.payload, currentSnapshot.pendingImages);
+    setSendState({
+      detail: `Sending to #${state.selectedChannel || "channel"}…`,
+      retryPayload: currentSnapshot,
+    });
+    render();
+    const appState = await call("SendMessage", currentSnapshot.payload, { timeoutMs: 0 });
     state.app = appState;
     state.selectedChannel = appState.selectedChannel || "";
     state.draft.body = "";
     state.draft.replyTo = "";
     state.draft.editOf = "";
     state.draft.experimentSHA = "";
+    state.draft.pendingImages = [];
     setSendState({
       inFlight: false,
       error: "",
       operation: "",
+      detail: "",
       retryAction: "",
       retryPayload: null,
     });
@@ -348,8 +429,9 @@ const submitMessage = async (payload = buildSendPayload()) => {
       inFlight: false,
       error: err.message || String(err),
       operation: "",
+      detail: "",
       retryAction: "send",
-      retryPayload: payload,
+      retryPayload: currentSnapshot,
     });
     render();
   }
@@ -371,6 +453,7 @@ const deleteMessage = async (commitHash) => {
       inFlight: true,
       error: "",
       operation: "delete",
+      detail: "Deleting message…",
       retryAction: "delete",
       retryPayload: commitHash,
     });
@@ -386,6 +469,7 @@ const deleteMessage = async (commitHash) => {
       inFlight: false,
       error: "",
       operation: "",
+      detail: "",
       retryAction: "",
       retryPayload: null,
     });
@@ -396,6 +480,7 @@ const deleteMessage = async (commitHash) => {
       inFlight: false,
       error: err.message || String(err),
       operation: "",
+      detail: "",
       retryAction: "delete",
       retryPayload: commitHash,
     });
@@ -854,11 +939,15 @@ const render = () => {
   const sendLabel = state.draft.editOf ? "Save edit" : "Send message";
   const previewToggleLabel = state.previewOpen ? "Hide preview" : "Show preview";
   const composerClass = state.previewOpen ? "composer-split preview-open" : "composer-split";
+  const pendingImageCount = state.draft.pendingImages.length;
+  const composerHint = pendingImageCount > 0
+    ? `${pendingImageCount} image${pendingImageCount > 1 ? "s" : ""} ready to upload on send. Paste images. Cmd+Enter to send.`
+    : "Markdown supported. Paste images. Cmd+Enter to send. Replies, edits, and attachment uploads are appended as new commits.";
   const sendInlineStatus = state.send.inFlight
     ? `
       <div class="send-status send-status-progress">
         <div class="send-progress-track"><div class="send-progress-bar"></div></div>
-        <div class="send-status-text">${state.send.operation === "delete" ? "Deleting message…" : `Sending to #${escapeHTML(state.selectedChannel || "channel")}…`}</div>
+        <div class="send-status-text">${escapeHTML(state.send.detail || (state.send.operation === "delete" ? "Deleting message…" : `Sending to #${state.selectedChannel || "channel"}…`))}</div>
       </div>
     `
     : state.send.error
@@ -925,7 +1014,7 @@ const render = () => {
             <div class="composer-actions">
               <div class="composer-meta">
                 <button type="button" data-toggle-preview="true">${previewToggleLabel}</button>
-                <div class="hint">Markdown supported. Paste images. Cmd+Enter to send. Replies, edits, and attachment uploads are appended as new commits.</div>
+                <div class="hint">${escapeHTML(composerHint)}</div>
                 ${sendInlineStatus}
               </div>
               <button class="primary" data-send="true" ${state.send.inFlight ? "disabled" : ""}>${state.send.inFlight ? (state.send.operation === "delete" ? "Deleting…" : "Sending…") : sendLabel}</button>
