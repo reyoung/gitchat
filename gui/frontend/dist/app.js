@@ -625,7 +625,7 @@ const renderMessageCard = (message, options = {}) => {
     actions.push(`<button type="button" class="message-action icon" title="Open thread" aria-label="Open thread" data-open-thread="${escapeHTML(message.commitHash)}">›</button>`);
   }
   return `
-    <article class="message-card${mine}">
+    <article class="message-card${mine}${message.deleted ? " deleted-collapsed" : ""}">
       <div class="message-rail">
         ${renderAvatar(message.avatarURL, message.userID)}
         <div class="message-meta">
@@ -639,7 +639,7 @@ const renderMessageCard = (message, options = {}) => {
       </div>
       <div class="message-main">
         <div class="message-actions">${actions.join("")}</div>
-        <div class="message-body markdown-body ${message.deleted ? "is-deleted compact" : ""}">${message.deleted ? '<p><em>Deleted.</em></p>' : renderMarkdown(message.body || "")}</div>
+        <div class="message-body markdown-body ${message.deleted ? "is-deleted compact" : ""}">${message.deleted ? '<p><em>Deleted</em></p>' : renderMarkdown(message.body || "")}</div>
         ${tags.length ? `<div class="message-tags">${tags.join("")}</div>` : ""}
       </div>
     </article>
