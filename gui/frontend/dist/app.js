@@ -17,6 +17,11 @@ const state = {
   },
   modal: null,
   status: null,
+  send: {
+    inFlight: false,
+    error: "",
+    retryPayload: null,
+  },
 };
 
 const previousStateForScroll = {
@@ -175,11 +180,12 @@ const call = async (method, payload, options = {}) => {
     throw new Error("Wails bridge is not available yet");
   }
   const timeoutMs = options.timeoutMs ?? 5000;
+  const invoke = () => (payload === undefined ? bridge[method]() : bridge[method](payload));
   if (timeoutMs <= 0) {
-    return bridge[method](payload);
+    return invoke();
   }
   return Promise.race([
-    bridge[method](payload),
+    invoke(),
     new Promise((_, reject) => {
       window.setTimeout(() => reject(new Error(`Timed out calling ${method}`)), timeoutMs);
     }),
@@ -233,7 +239,7 @@ const uploadPastedImageFile = async (file) => {
     channelID: state.selectedChannel,
     filename: file.name || "pasted-image.png",
     dataURL,
-  });
+  }, { timeoutMs: 0 });
   appendMarkdownToDraft(markdown);
   showStatus("success", "Image pasted");
 };
@@ -287,29 +293,60 @@ const maybeNotifyNewMessages = async (previousState, nextState) => {
   }
 };
 
-const submitMessage = async () => {
+const buildSendPayload = () => ({
+  userID: state.app?.currentUser || "",
+  channelID: state.selectedChannel,
+  subject: "",
+  body: state.draft.body,
+  replyTo: state.draft.replyTo,
+  editOf: state.draft.editOf,
+  experimentID: "",
+  experimentSHA: state.draft.experimentSHA,
+});
+
+const setSendState = (next) => {
+  state.send = {
+    ...state.send,
+    ...next,
+  };
+};
+
+const submitMessage = async (payload = buildSendPayload()) => {
+  if (state.send.inFlight) return;
   try {
-    const appState = await call("SendMessage", {
-      userID: state.app?.currentUser || "",
-      channelID: state.selectedChannel,
-      subject: "",
-      body: state.draft.body,
-      replyTo: state.draft.replyTo,
-      editOf: state.draft.editOf,
-      experimentID: "",
-      experimentSHA: state.draft.experimentSHA,
+    setSendState({
+      inFlight: true,
+      error: "",
+      retryPayload: payload,
     });
+    render();
+    const appState = await call("SendMessage", payload, { timeoutMs: 0 });
     state.app = appState;
     state.selectedChannel = appState.selectedChannel || "";
     state.draft.body = "";
     state.draft.replyTo = "";
     state.draft.editOf = "";
     state.draft.experimentSHA = "";
+    setSendState({
+      inFlight: false,
+      error: "",
+      retryPayload: null,
+    });
     render();
     showStatus("success", "Message saved");
   } catch (err) {
-    showStatus("error", err.message || String(err));
+    setSendState({
+      inFlight: false,
+      error: err.message || String(err),
+      retryPayload: payload,
+    });
+    render();
   }
+};
+
+const retrySend = async () => {
+  if (!state.send.retryPayload) return;
+  await submitMessage(state.send.retryPayload);
 };
 
 const modalPresets = {
@@ -655,6 +692,21 @@ const render = () => {
   const sendLabel = state.draft.editOf ? "Save edit" : "Send message";
   const previewToggleLabel = state.previewOpen ? "Hide preview" : "Show preview";
   const composerClass = state.previewOpen ? "composer-split preview-open" : "composer-split";
+  const sendInlineStatus = state.send.inFlight
+    ? `
+      <div class="send-status send-status-progress">
+        <div class="send-progress-track"><div class="send-progress-bar"></div></div>
+        <div class="send-status-text">Sending to #${escapeHTML(state.selectedChannel || "channel")}…</div>
+      </div>
+    `
+    : state.send.error
+    ? `
+      <div class="send-status send-status-error">
+        <div class="send-status-text">${escapeHTML(state.send.error)}</div>
+        <button type="button" data-retry-send="true">Retry</button>
+      </div>
+    `
+    : "";
 
   root.innerHTML = `
     <div class="shell">
@@ -712,8 +764,9 @@ const render = () => {
               <div class="composer-meta">
                 <button type="button" data-toggle-preview="true">${previewToggleLabel}</button>
                 <div class="hint">Markdown supported. Paste images. Cmd+Enter to send. Replies, edits, and attachment uploads are appended as new commits.</div>
+                ${sendInlineStatus}
               </div>
-              <button class="primary" data-send="true">${sendLabel}</button>
+              <button class="primary" data-send="true" ${state.send.inFlight ? "disabled" : ""}>${state.send.inFlight ? "Sending…" : sendLabel}</button>
             </div>
           </div>
         </section>
@@ -807,6 +860,10 @@ const render = () => {
 
   root.querySelectorAll("[data-send]").forEach((button) => {
     button.addEventListener("click", submitMessage);
+  });
+
+  root.querySelectorAll("[data-retry-send]").forEach((button) => {
+    button.addEventListener("click", retrySend);
   });
 
   root.querySelectorAll("[data-toggle-preview]").forEach((button) => {
