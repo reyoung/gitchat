@@ -689,7 +689,7 @@ button {
 
 .composer-preview {
   display: none;
-  padding: 14px;
+  padding: 14px 14px 0 8px;
 }
 
 .composer-preview.is-open {
@@ -702,7 +702,7 @@ button {
 
 .composer-preview-body {
   min-height: 160px;
-  margin-top: 8px;
+  margin-top: 0;
   padding: 14px;
   border-radius: 12px;
   border: 1px solid var(--line);

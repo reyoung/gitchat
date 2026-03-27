@@ -904,7 +904,6 @@ const render = () => {
                 <textarea id="body" style="height:${Math.max(160, state.composerHeight)}px" placeholder="Write a message. Use Cmd+Enter to send. Markdown and images are supported.">${escapeHTML(state.draft.body)}</textarea>
               </div>
               <div class="composer-preview ${state.previewOpen ? "is-open" : ""}">
-                <div class="field-label">Preview</div>
                 <div class="composer-preview-body markdown-body" style="height:${Math.max(160, state.composerHeight)}px">${state.draft.body.trim() ? renderMarkdown(state.draft.body) : '<div class="composer-preview-empty">Markdown preview appears here.</div>'}</div>
               </div>
             </div>
