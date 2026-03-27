@@ -16,6 +16,7 @@ const state = {
     experimentSHA: "",
   },
   modal: null,
+  confirmDelete: "",
   status: null,
   send: {
     inFlight: false,
@@ -473,6 +474,16 @@ const closeModal = () => {
   render();
 };
 
+const openDeleteConfirm = (commitHash) => {
+  state.confirmDelete = commitHash || "";
+  render();
+};
+
+const closeDeleteConfirm = () => {
+  state.confirmDelete = "";
+  render();
+};
+
 const submitModal = async () => {
   if (!state.modal) return;
   const preset = modalPresets[state.modal.kind];
@@ -483,6 +494,13 @@ const submitModal = async () => {
   } catch (err) {
     showStatus("error", err.message || String(err));
   }
+};
+
+const submitDeleteConfirm = async () => {
+  const commitHash = state.confirmDelete;
+  state.confirmDelete = "";
+  render();
+  await deleteMessage(commitHash);
 };
 
 const startReply = (commitHash) => {
@@ -710,6 +728,30 @@ const renderModal = () => {
   `;
 };
 
+const renderDeleteConfirm = () => {
+  if (!state.confirmDelete) return "";
+  return `
+    <div class="modal-backdrop" data-close-delete="true">
+      <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <h2>Delete message</h2>
+          <p>This appends a delete commit. History is preserved.</p>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label>Commit</label>
+            <input value="${escapeHTML(state.confirmDelete.slice(0, 12))}" readonly />
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" data-close-delete="true">Cancel</button>
+          <button type="button" class="primary" data-submit-delete="true">Delete</button>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
 const render = () => {
   const root = document.querySelector("#app");
   if (!state.app) {
@@ -837,6 +879,7 @@ const render = () => {
     </div>
     ${state.status ? `<div class="status ${escapeHTML(state.status.kind)}">${escapeHTML(state.status.text)}</div>` : ""}
     ${renderModal()}
+    ${renderDeleteConfirm()}
   `;
 
   root.querySelectorAll("[data-channel-id]").forEach((button) => {
@@ -858,6 +901,10 @@ const render = () => {
     button.addEventListener("click", closeModal);
   });
 
+  root.querySelectorAll("[data-close-delete]").forEach((button) => {
+    button.addEventListener("click", closeDeleteConfirm);
+  });
+
   root.querySelectorAll("[data-modal-field]").forEach((field) => {
     const syncField = (event) => {
       if (!state.modal) return;
@@ -869,6 +916,10 @@ const render = () => {
 
   root.querySelectorAll("[data-submit-modal]").forEach((button) => {
     button.addEventListener("click", submitModal);
+  });
+
+  root.querySelectorAll("[data-submit-delete]").forEach((button) => {
+    button.addEventListener("click", submitDeleteConfirm);
   });
 
   const bodyInput = root.querySelector("#body");
@@ -935,11 +986,10 @@ const render = () => {
   });
 
   root.querySelectorAll("[data-delete-hash]").forEach((button) => {
-    button.addEventListener("click", async () => {
+    button.addEventListener("click", () => {
       const commitHash = button.dataset.deleteHash || "";
       if (!commitHash) return;
-      if (!window.confirm(`Delete message ${commitHash.slice(0, 10)}?`)) return;
-      await deleteMessage(commitHash);
+      openDeleteConfirm(commitHash);
     });
   });
 
