@@ -623,7 +623,7 @@ const renderDateDivider = (label) => `
 
 const renderMessageCard = (message, options = {}) => {
   const mine = message.userID === state.app.currentUser ? " mine" : "";
-  const reply = message.replyTo ? `<span class="message-thread">reply to ${escapeHTML(message.replyTo.slice(0, 10))}</span>` : "";
+  const reply = message.replyTo ? `<span class="message-thread subtle">reply to ${escapeHTML(message.replyTo.slice(0, 10))}</span>` : "";
   const edited = message.editCount ? `<span class="message-thread">edited ${message.editCount}x${message.editedAt ? ` · last ${escapeHTML(message.editedAt)}` : ""}</span>` : "";
   const deleted = message.deleted ? `<span class="message-thread">deleted${message.deletedAt ? ` · ${escapeHTML(message.deletedAt)}` : ""}</span>` : "";
   const threadSummary = options.threadSummary || null;
@@ -660,7 +660,7 @@ const renderMessageCard = (message, options = {}) => {
         <div class="message-head">
           <span class="message-author">${escapeHTML(message.userID)}</span>
           <span class="message-time">${escapeHTML(message.createdAt)}</span>
-          <span class="message-sha">${escapeHTML(message.shortHash)}</span>
+          <span class="message-sha" title="${escapeHTML(message.commitHash)}">${escapeHTML(message.shortHash)}</span>
           ${reply}
           ${edited}
           ${deleted}
